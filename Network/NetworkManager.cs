@@ -15,6 +15,7 @@ namespace Network
         public virtual bool IsInitialized { get; }
         public virtual bool IsRunning { get; }
         public virtual bool IsConnected { get; }
+        public virtual bool IsClient { get; }
 
         public virtual NetworkPeer Peer { get; }
 

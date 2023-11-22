@@ -61,6 +61,10 @@
     <Compile Include="Requests\ResponseHandler.cs" />
     <Compile Include="Requests\ResponseMessage.cs" />
     <Compile Include="Requests\ResponseStatus.cs" />
+    <Compile Include="Synchronization\SynchronizationManager.cs" />
+    <Compile Include="Synchronization\SynchronizationParent.cs" />
+    <Compile Include="Synchronization\SynchronizedProperty.cs" />
+    <Compile Include="Synchronization\SynchronizedString.cs" />
     <Compile Include="Tcp\TcpClient.cs" />
     <Compile Include="Tcp\TcpPeer.cs" />
     <Compile Include="Tcp\TcpServer.cs" />
