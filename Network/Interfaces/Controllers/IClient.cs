@@ -1,6 +1,8 @@
 ﻿using System;
 
-namespace Network
+using Network.Interfaces.Transporting;
+
+namespace Network.Interfaces.Controllers
 {
     public interface IClient : IController
     {

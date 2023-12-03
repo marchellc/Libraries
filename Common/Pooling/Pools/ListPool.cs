@@ -52,6 +52,9 @@ namespace Common.Pooling.Pools
             if (Buffer is null)
                 throw new InvalidOperationException($"This pool's buffer is missing");
 
+            if (elements is null)
+                throw new ArgumentNullException(nameof(elements));
+
             var list = Buffer.Get();
 
             if (elements != null)
@@ -75,6 +78,9 @@ namespace Common.Pooling.Pools
             if (Buffer is null)
                 throw new InvalidOperationException($"This pool's buffer is missing");
 
+            if (obj is null)
+                return;
+
             obj.Clear();
 
             Buffer.Add(obj);
@@ -84,6 +90,9 @@ namespace Common.Pooling.Pools
         {
             if (Buffer is null)
                 throw new InvalidOperationException($"This pool's buffer is missing");
+
+            if (obj is null)
+                throw new ArgumentNullException(nameof(obj));
 
             var array = new TElement[obj.Count];
 

@@ -6,7 +6,8 @@ using Common.Utilities;
 
 using Network.Attributes;
 using Network.Extensions;
-using Network.Interfaces;
+using Network.Interfaces.Transporting;
+using Network.Interfaces.Controllers;
 
 using System;
 using System.Collections.Generic;
@@ -29,6 +30,8 @@ namespace Network.Tcp
         private long sent = 0;
         private long recv = 0;
 
+        private bool isSynced;
+
         private Latency latency;
 
         private LogOutput log;
@@ -38,8 +41,6 @@ namespace Network.Tcp
         private LockedList<Type> syncedTypes = new LockedList<Type>();
         private LockedDictionary<byte, List<Action<BinaryReader>>> msgHandlers = new LockedDictionary<byte, List<Action<BinaryReader>>>();
         private LockedDictionary<Type, LockedList<WrappedAction<Delegate>>> typeHandlers;
-
-        public event Action OnReady;
 
         public TcpTransport(IPeer peer, IController controller)
         {
@@ -70,10 +71,7 @@ namespace Network.Tcp
             CreateHandler(SYNC_RES, HandleSyncResponse);
 
             if (controller is IServer)
-            {
-                this.latencyTimer = new Timer(UpdateLatency, null, 1500, 5000);
-                this.Send(SYNC_REQ, null);
-            }
+                Synchronize();
         }
 
         public void Shutdown()
@@ -97,6 +95,8 @@ namespace Network.Tcp
 
             controller = null;
             peer = null;
+
+            isSynced = false;
 
             recv = 0;
             sent = 0;
@@ -177,14 +177,11 @@ namespace Network.Tcp
             {
                 var messageId = br.ReadByte();
 
-                if (messageId < 30)
+                if (msgHandlers.TryGetValue(messageId, out var list))
                 {
-                    if (msgHandlers.TryGetValue(messageId, out var list))
+                    for (int i = 0; i < list.Count; i++)
                     {
-                        for (int i = 0; i < list.Count; i++)
-                        {
-                            list[i].Call(br);
-                        }
+                        list[i].Call(br);
                     }
 
                     return;
@@ -202,10 +199,10 @@ namespace Network.Tcp
 
                     var type = objects[i].GetType();
 
-                    if (typeHandlers.TryGetValue(type, out var list))
+                    if (typeHandlers.TryGetValue(type, out var typeList))
                     {
                         for (int x = 0; x < list.Count; x++)
-                            list[x].Proxy.Method.Call(list[x].Proxy.Target, null, objects[i]);
+                            typeList[x].Proxy.Method.Call(typeList[x].Proxy.Target, null, objects[i]);
                     }
                     else
                     {
@@ -226,8 +223,6 @@ namespace Network.Tcp
                 server.Send(peer.Id, data);
             else if (controller is IClient client)
                 client.Send(data);
-
-            log.Trace($"Sent {data.Length} bytes (total now: {sent})");
         }
 
         public void Synchronize()
@@ -267,8 +262,6 @@ namespace Network.Tcp
 
             latency.AverageTrip = (latency.MaxTrip + latency.MinTrip) / 2;
 
-            log.Debug($"Latency: {latency.Trip} ms");
-
             this.Send(PING_RES, bw =>
             {
                 bw.WriteDate(latency.SentAt);
@@ -290,12 +283,15 @@ namespace Network.Tcp
                 latency.MaxTrip = latency.Trip;
 
             latency.AverageTrip = (latency.MaxTrip + latency.MinTrip) / 2;
-
-            log.Debug($"Latency: ({latency.SentAt} / {latency.ReceivedAt}) {latency.Trip} ms");
         }
 
         private void HandleSyncRequest(BinaryReader br)
         {
+            if (isSynced)
+                return;
+
+            isSynced = true;
+
             syncedTypes.Clear();
 
             var assemblies = AppDomain.CurrentDomain.GetAssemblies();
@@ -305,6 +301,9 @@ namespace Network.Tcp
                 foreach (var type in assembly.GetTypes())
                 {
                     if (type == typeof(IMessage))
+                        continue;
+
+                    if (syncedTypes.Contains(type))
                         continue;
 
                     if (typeof(IMessage).IsAssignableFrom(type))
@@ -321,28 +320,31 @@ namespace Network.Tcp
             }
 
             this.Send(SYNC_RES, bw => bw.WriteItems(syncedTypes, t => bw.WriteType(t)));
-
-            OnReady.Call();
         }
 
         private void HandleSyncResponse(BinaryReader br)
         {
+            if (isSynced)
+                return;
+
             syncedTypes.Clear();
-            
+
+            latencyTimer = new Timer(UpdateLatency, null, 1500, 5000);
+
             try
             {
                 var types = br.ReadArray(true, br.ReadType);
+
                 syncedTypes.AddRange(types);
             }
-            catch
+            catch (Exception ex)
             {
-                log.Fatal($"Failed to read sync types, disconnecting!");
+                log.Fatal($"Failed to read sync types, disconnecting!\n{ex}");
                 peer.Disconnect();
                 return;
             }
 
-            log.Trace($"Received {syncedTypes.Count} synced types.");
-            OnReady.Call();
+            isSynced = true;
         }
 
         private void UpdateLatency(object _)

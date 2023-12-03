@@ -1,11 +1,18 @@
 ﻿using Common.Extensions;
 using Common.Reflection;
+using Common.IO.Collections;
 
 using System;
 using System.Net;
 using System.Threading;
 
 using Telepathy;
+
+using Network.Interfaces.Controllers;
+using Network.Interfaces.Transporting;
+using Network.Interfaces.Features;
+using System.Linq;
+using Common.Logging;
 
 namespace Network.Tcp
 {
@@ -14,9 +21,12 @@ namespace Network.Tcp
         private Client client;
         private Timer timer;
         private TcpPeer peer;
+        private LogOutput log;
 
         private int tickRate = 100;
         private bool isManual;
+
+        private LockedList<Type> features = new LockedList<Type>();
 
         public event Action<IPeer> OnConnected;
         public event Action<IPeer> OnDisconnected;
@@ -69,7 +79,7 @@ namespace Network.Tcp
             if (client is null || !client.Connected)
                 throw new InvalidOperationException($"Attempted to send data over an unconnected socket.");
 
-            client.Send(new ArraySegment<byte>(data, 0, data.Length));
+            client.Send(data.ToSegment());
         }
 
         public void Start()
@@ -77,14 +87,23 @@ namespace Network.Tcp
             if (IsRunning)
                 Stop();
 
+            log = new LogOutput($"CLIENT_{Target}").Setup();
+            log.Info("Initializing KCP client");
+                
             client = new Client(short.MaxValue * 100);
             client.NoDelay = true;
             client.OnConnected = OnConnectedHandler;
             client.OnData = OnDataHandler;
             client.OnDisconnected = OnDisconnectedHandler;
 
+            Log.Info = LogOutput.Common.Info;
+            Log.Error = LogOutput.Common.Error;
+            Log.Warning = LogOutput.Common.Warn;
+
             if (!IsManual)
                 timer = new Timer(TickTimer, null, 0, TickRate);
+
+            log.Info("Connecting ..");
 
             client.Connect(Target.Address.ToString(), Target.Port);
         }
@@ -99,6 +118,9 @@ namespace Network.Tcp
 
             timer.Dispose();
             timer = null;
+
+            log.Dispose();
+            log = null;
 
             client.OnConnected = null;
             client.OnData = null;
@@ -117,12 +139,45 @@ namespace Network.Tcp
             client.Tick(TickRate * 100);
         }
 
+        public T AddFeature<T>() where T : IFeature, new()
+        {
+            if (!features.Contains(typeof(T)))
+                features.Add(typeof(T));
+
+            return peer != null ? peer.AddFeature<T>() : default;
+        }
+
+        public void RemoveFeature<T>() where T : IFeature
+        {
+            features.Remove(typeof(T));
+            peer?.RemoveFeature<T>();
+        }
+
+        public T GetFeature<T>() where T : IFeature
+            => peer != null ? peer.GetFeature<T>() : default;
+
+        public Type[] GetFeatures()
+            => features.ToArray();
+
         private void OnConnectedHandler()
         {
             peer = new TcpPeer(0, this, Target);
+
+            var type = peer.GetType();
+            var method = type.GetMethod("AddFeature");
+
+            for (int i = 0; i < features.Count; i++)
+            {
+                var generic = method.MakeGenericMethod(features[i]);
+
+                generic.Call(peer, null);
+            }
+
             peer.Start();
 
             OnConnected.Call(peer);
+
+            log.Info($"Connected to server");
         }
 
         private void OnDisconnectedHandler()
@@ -131,6 +186,8 @@ namespace Network.Tcp
 
             peer?.Stop();
             peer = null;
+
+            log.Info("Disconnected from server");
         }
 
         private void OnDataHandler(ArraySegment<byte> data)

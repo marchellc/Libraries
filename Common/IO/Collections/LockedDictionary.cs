@@ -1,4 +1,5 @@
 ﻿using Common.Reflection;
+
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -8,8 +9,8 @@ namespace Common.IO.Collections
 {
     public class LockedDictionary<TKey, TValue> : IDictionary<TKey, TValue>
     {
-        private object dictLock;
-        private Dictionary<TKey, TValue> dict;
+        private volatile object dictLock;
+        private volatile Dictionary<TKey, TValue> dict;
 
         public LockedDictionary()
         {

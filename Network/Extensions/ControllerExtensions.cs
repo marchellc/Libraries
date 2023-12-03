@@ -1,5 +1,7 @@
 ﻿using System.Net;
 
+using Network.Interfaces.Controllers;
+
 namespace Network.Extensions
 {
     public static class ControllerExtensions

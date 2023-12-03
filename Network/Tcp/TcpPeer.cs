@@ -1,23 +1,29 @@
 ﻿using Common.IO.Collections;
-using Common.Reflection;
-using Network.Interfaces;
+using Common.Logging;
+
+using Network.Interfaces.Controllers;
+using Network.Interfaces.Transporting;
+using Network.Interfaces.Features;
+
 using System;
 using System.Net;
+using System.Linq;
+using System.Collections.Generic;
+using System.Collections.Concurrent;
 
 namespace Network.Tcp
 {
     public class TcpPeer : IPeer
     {
-        private bool isConnected;
+        private volatile bool isConnected;
 
         private IController controller;
 
         private TcpTransport transport;
         private IPEndPoint target;
+        private LogOutput log;
 
-        private LockedList<IFeature> features;
-
-        public event Action OnReady;
+        private ConcurrentBag<IFeature> features;
 
         public int Id { get; }
         public int TickRate { get; set; }
@@ -36,21 +42,34 @@ namespace Network.Tcp
             this.Id = connectionId;
             this.controller = controller;
             this.target = endPoint;
-            this.features = new LockedList<IFeature>();
+            this.features = new ConcurrentBag<IFeature>();
+            this.transport = new TcpTransport(this, controller);
+            this.log = new LogOutput($"PEER :: {Id}");
         }
 
         public T AddFeature<T>() where T : IFeature, new()
         {
-            for (int i = 0; i < features.Count; i++)
+            log.Info($"Adding feature: {typeof(T).FullName}");
+
+            foreach (var f in features)
             {
-                if (features[i] is T t)
+                log.Trace($"Scanning: {f.GetType().FullName}");
+
+                if (f is T t)
+                {
+                    log.Trace($"Found");
                     return t;
+                }
             }
 
             var feature = new T();
 
             features.Add(feature);
-            feature.Start(this);
+
+            if (!feature.IsRunning)
+                feature.Start(this);
+
+            log.Debug($"Added feature '{typeof(T).FullName}'");
 
             return feature;
         }
@@ -59,7 +78,7 @@ namespace Network.Tcp
         {
             for (int i = 0; i < features.Count; i++)
             {
-                if (features[i] is T t)
+                if (features.ElementAt(i) is T t)
                     return t;
             }
 
@@ -68,23 +87,23 @@ namespace Network.Tcp
 
         public void RemoveFeature<T>() where T : IFeature
         {
-            var removed = features.RemoveRange(f => f is T);
+            foreach (var f in features)
+            {
+                if (f is T)
+                    f.Stop();
+            }
 
-            for (int i = 0; i < removed.Count; i++)
-                removed[i].Stop();
+            features = new ConcurrentBag<IFeature>(features.Where(f => f is not T));
         }
 
         public void Start()
         {
+            if (isConnected)
+                return;
+
             isConnected = true;
 
-            transport = new TcpTransport(this, controller);
             transport.Initialize();
-
-            for (int i = 0; i < features.Count; i++)
-                features[i].Start(this);
-
-            OnReady.Call();
         }
 
         public void Stop()
@@ -92,9 +111,8 @@ namespace Network.Tcp
             isConnected = false;
 
             for (int i = 0; i < features.Count; i++)
-                features[i].Stop();
+                features.ElementAt(i).Stop();
 
-            features.Clear();
             features = null;
 
             target = null;
@@ -112,5 +130,8 @@ namespace Network.Tcp
         }
 
         public void Tick() { }
+
+        public Type[] GetFeatures()
+            => features.Select(f => f.GetType()).ToArray();
     }
 }

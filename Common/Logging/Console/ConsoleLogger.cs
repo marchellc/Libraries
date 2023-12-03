@@ -5,7 +5,7 @@ namespace Common.Logging.Console
     public class ConsoleLogger : ILogger
     {
         private LogMessage lastMsg;
-        private bool isBusy;
+        private static bool isBusy;
 
         public LogMessage Latest => lastMsg;
 

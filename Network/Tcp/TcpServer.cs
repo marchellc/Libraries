@@ -2,13 +2,17 @@
 using Common.IO.Collections;
 using Common.Reflection;
 
-using Network.Interfaces;
+using Network.Interfaces.Controllers;
+using Network.Interfaces.Transporting;
+using Network.Interfaces.Features;
 
 using System;
 using System.Net;
 using System.Threading;
+using System.Linq;
 
 using Telepathy;
+using Common.Logging;
 
 namespace Network.Tcp
 {
@@ -16,6 +20,7 @@ namespace Network.Tcp
     {
         private Server server;
         private Timer timer;
+        private LogOutput log;
 
         private LockedList<TcpPeer> peers;
         private LockedList<Type> features = new LockedList<Type>();
@@ -67,6 +72,9 @@ namespace Network.Tcp
                 Stop();
 
             peers = new LockedList<TcpPeer>();
+            log = new LogOutput($"SERVER :: {Target.Port}").Setup();
+
+            log.Info("Starting ..");
 
             server = new Server(short.MaxValue * 100);
             server.NoDelay = true;
@@ -74,10 +82,16 @@ namespace Network.Tcp
             server.OnData = OnDataHandler;
             server.OnDisconnected = OnDisconnectedHandler;
 
+            Log.Info = LogOutput.Common.Info;
+            Log.Error = LogOutput.Common.Error;
+            Log.Warning = LogOutput.Common.Warn;
+
             if (!IsManual)
                 timer = new Timer(TickTimer, null, 0, TickRate);
 
             server.Start(Target.Port);
+
+            log.Info("Started");
         }
 
         public void Stop()
@@ -90,6 +104,9 @@ namespace Network.Tcp
 
             timer.Dispose();
             timer = null;
+
+            log.Dispose();
+            log = null;
 
             server.OnConnected = null;
             server.OnData = null;
@@ -127,36 +144,39 @@ namespace Network.Tcp
             server.Disconnect(connectionId);
         }
 
-        public void AddFeature<T>() where T : IFeature
+        public T AddFeature<T>() where T : IFeature, new()
         {
             if (!features.Contains(typeof(T)))
                 features.Add(typeof(T));
+
+            return default;
         }
+
+        public T GetFeature<T>() where T : IFeature
+            => default;
 
         public void RemoveFeature<T>() where T : IFeature
         {
             features.Remove(typeof(T));
         }
 
+        public Type[] GetFeatures()
+            => features.ToArray();
+
         private void OnConnectedHandler(int connectionId)
         {
-            var peer = new TcpPeer(connectionId, this, new IPEndPoint(IPAddress.Parse(server.GetClientAddress(connectionId)), Target.Port));
+            if (peers.Any(p => p.Id == connectionId))
+                return;
+
+            var peer = new TcpPeer(connectionId, this, server.GetClientEndPoint(connectionId));
 
             peers.Add(peer);
 
             peer.Start();
 
-            var type = peer.GetType();
-            var method = type.GetMethod("AddFeature");
-
-            for (int i = 0; i < features.Count; i++)
-            {
-                var generic = method.MakeGenericMethod(features[i]);
-
-                generic.Call(peer, null);
-            }
-
             OnConnected.Call(peer);
+
+            log.Info($"Client connected from '{peer.Target}' as {connectionId}");
         }
 
         private void OnDisconnectedHandler(int connectionId)
@@ -165,6 +185,8 @@ namespace Network.Tcp
 
             for (int i = 0; i < removed.Count; i++)
             {
+                log.Info($"Client disconnected from {removed[i].Target}");
+
                 OnDisconnected.Call(removed[i]);
 
                 removed[i].Stop();
@@ -187,7 +209,7 @@ namespace Network.Tcp
 
         private void TickTimer(object _)
         {
-            server?.Tick(TickRate * 100);
+            server?.Tick(tickRate * 100);
         }
     }
 }

@@ -32,7 +32,11 @@ namespace Common.Pooling.Buffers
         {
             TObject item = default;
 
-            if (_stack.Count <= 0)
+            try
+            {
+                item = _stack.Pop();
+            }
+            catch (InvalidOperationException)
             {
                 if ((_pool.Options & PoolOptions.ExceptionOnMissing) != 0)
                     throw new InvalidOperationException($"The pool buffer is empty.");
@@ -44,10 +48,6 @@ namespace Common.Pooling.Buffers
                     item = Constructor.Call();
                 else
                     throw new InvalidOperationException($"There is no action specified in case of an empty pool buffer.");
-            }
-            else
-            {
-                item = _stack.Pop();
             }
 
             if (item != null
@@ -62,9 +62,6 @@ namespace Common.Pooling.Buffers
         {
             if (obj is null)
                 throw new ArgumentNullException(nameof(obj));
-
-            if (_stack.Contains(obj))
-                throw new InvalidOperationException($"This object is already in the pool buffer.");
 
             if ((_pool.Options & PoolOptions.EnableTracking) != 0 && !_track.Contains(obj))
                 throw new InvalidOperationException($"This object does not belong to this pool buffer.");

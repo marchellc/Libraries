@@ -1,12 +1,12 @@
 ﻿using System;
 using System.IO;
 
-namespace Network
+using Network.Interfaces.Controllers;
+
+namespace Network.Interfaces.Transporting
 {
     public interface ITransport
     {
-        public event Action OnReady;
-
         IController Controller { get; }
 
         bool IsRunning { get; }

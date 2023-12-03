@@ -1,6 +1,9 @@
 ﻿using System;
 
-namespace Network.Interfaces
+using Network.Interfaces.Features;
+using Network.Interfaces.Transporting;
+
+namespace Network.Interfaces.Controllers
 {
     public interface IServer : IController
     {
@@ -12,8 +15,5 @@ namespace Network.Interfaces
 
         void Send(int connectionId, byte[] data);
         void Disconnect(int connectionId);
-
-        void AddFeature<T>() where T : IFeature;
-        void RemoveFeature<T>() where T : IFeature;
     }
 }

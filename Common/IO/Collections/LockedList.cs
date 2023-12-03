@@ -1,7 +1,5 @@
-﻿using Common.Attributes;
-using Common.Pooling;
-using Common.Pooling.Pools;
-using Common.Reflection;
+﻿using Common.Reflection;
+
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -10,8 +8,8 @@ namespace Common.IO.Collections
 {
     public class LockedList<T> : IList<T>
     {
-        private object listLock;
-        private List<T> list;
+        private volatile object listLock;
+        private volatile List<T> list;
 
         public LockedList()
         {

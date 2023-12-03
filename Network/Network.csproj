@@ -51,17 +51,33 @@
     <Compile Include="Extensions\TransportExtensions.cs" />
     <Compile Include="Extensions\WriterExtensions.cs" />
     <Compile Include="Features\Feature.cs" />
-    <Compile Include="Interfaces\IClient.cs" />
-    <Compile Include="Interfaces\IController.cs" />
-    <Compile Include="Interfaces\IFeature.cs" />
-    <Compile Include="Interfaces\IFeatures.cs" />
-    <Compile Include="Interfaces\IMessage.cs" />
-    <Compile Include="Interfaces\IPeer.cs" />
-    <Compile Include="Interfaces\IServer.cs" />
-    <Compile Include="Interfaces\ITransport.cs" />
+    <Compile Include="Interfaces\Controllers\IClient.cs" />
+    <Compile Include="Interfaces\Controllers\IController.cs" />
+    <Compile Include="Interfaces\Features\IFeature.cs" />
+    <Compile Include="Interfaces\Requests\IRequest.cs" />
+    <Compile Include="Interfaces\Requests\IRequestManager.cs" />
+    <Compile Include="Interfaces\Requests\IResponse.cs" />
+    <Compile Include="Interfaces\Requests\ResponseStatus.cs" />
+    <Compile Include="Interfaces\Synchronization\ISynchronizationManager.cs" />
+    <Compile Include="Interfaces\Synchronization\ISynchronizedRoot.cs" />
+    <Compile Include="Interfaces\Synchronization\ISynchronizedValue.cs" />
+    <Compile Include="Interfaces\Transporting\IMessage.cs" />
+    <Compile Include="Interfaces\Controllers\IPeer.cs" />
+    <Compile Include="Interfaces\Controllers\IServer.cs" />
+    <Compile Include="Interfaces\Transporting\ITransport.cs" />
     <Compile Include="IpHelper.cs" />
     <Compile Include="Latency.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Requests\Request.cs" />
+    <Compile Include="Requests\RequestCache.cs" />
+    <Compile Include="Requests\RequestManager.cs" />
+    <Compile Include="Requests\Response.cs" />
+    <Compile Include="Synchronization\SynchronizationManager.cs" />
+    <Compile Include="Synchronization\SynchronizedDelegatedValue.cs" />
+    <Compile Include="Synchronization\SynchronizedRoot.cs" />
+    <Compile Include="Synchronization\SynchronizedString.cs" />
+    <Compile Include="Synchronization\SynchronizedTime.cs" />
+    <Compile Include="Synchronization\SynchronizedValue.cs" />
     <Compile Include="Tcp\TcpClient.cs" />
     <Compile Include="Tcp\TcpPeer.cs" />
     <Compile Include="Tcp\TcpServer.cs" />
@@ -80,5 +96,6 @@
   <ItemGroup>
     <None Include="packages.config" />
   </ItemGroup>
+  <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

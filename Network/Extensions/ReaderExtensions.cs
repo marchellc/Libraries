@@ -1,4 +1,4 @@
-﻿using Network.Interfaces;
+﻿using Network.Interfaces.Transporting;
 
 using Newtonsoft.Json;
 
@@ -31,7 +31,7 @@ namespace Network.Extensions
                 var jsonValue = JsonConvert.DeserializeObject(jsonStr, type);
 
                 if (jsonValue != null && jsonValue is IMessage message)
-                    message.Read(reader);
+                    message.Read(reader, transport);
 
                 return jsonValue;
             }
@@ -40,7 +40,7 @@ namespace Network.Extensions
                 var value = Activator.CreateInstance(type);
 
                 if (value != null && value is IMessage message)
-                    message.Read(reader);
+                    message.Read(reader, transport);
 
                 return value;
             }

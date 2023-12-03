@@ -4,6 +4,9 @@ using Common.Reflection;
 using System;
 using System.IO;
 
+using Network.Interfaces.Transporting;
+using Common.Logging;
+
 namespace Network.Extensions
 {
     public static class TransportExtensions
@@ -37,5 +40,11 @@ namespace Network.Extensions
                 transport.Send(ms.ToArray());
             }
         }
+
+        public static void WriteObject(this ITransport transport, BinaryWriter writer, object obj, bool isJson = false)
+            => writer.WriteObject(obj, transport, isJson);
+
+        public static object ReadObject(this ITransport transport, BinaryReader reader)
+            => reader.ReadObject(transport);
     }
 }

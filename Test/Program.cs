@@ -1,4 +1,5 @@
-﻿using System.Net;
+﻿using System.IO;
+using System.Net;
 using System.Linq;
 using System.Threading.Tasks;
 
@@ -6,6 +7,7 @@ using Network.Tcp;
 using Network.Extensions;
 
 using Common.Logging;
+using Network.Synchronization;
 
 namespace Test
 {
@@ -21,18 +23,14 @@ namespace Test
 
                 server.OnConnected += peer =>
                 {
-                    peer.OnReady += () =>
-                    {
-                        peer.Transport.OnReady += () =>
-                        {
-                            peer.Transport.CreateHandler(20, br =>
-                            {
-                                LogOutput.Common.Info($"Received message: {br.ReadString()}");
-                            });
+                    var sync = peer.AddFeature<SynchronizationManager>();
 
-                            peer.Transport.Send(20, bw => bw.Write("there"));
-                        };
-                    };
+                    sync.CreateHandler<TestRoot>(root =>
+                    {
+                        LogOutput.Common.Info($"test root created");
+                    });
+
+                    LogOutput.Common.Info("sync ready");
                 };
 
                 server.Start();
@@ -43,18 +41,9 @@ namespace Test
 
                 client.OnConnected += peer =>
                 {
-                    peer.OnReady += () =>
-                    {
-                        peer.Transport.OnReady += () =>
-                        {
-                            peer.Transport.CreateHandler(20, br =>
-                            {
-                                LogOutput.Common.Info($"Received message: {br.ReadString()}");
-                            });
+                    var sync = peer.AddFeature<SynchronizationManager>();
 
-                            peer.Transport.Send(20, bw => bw.Write("hello"));
-                        };
-                    };
+                    sync.Create<TestRoot>().Word.Value = "there";
                 };
 
                 client.Start();
@@ -62,5 +51,10 @@ namespace Test
 
             await Task.Delay(-1);
         }
+    }
+
+    public class TestRoot : SynchronizedRoot
+    {
+        public SynchronizedString Word { get; } = new SynchronizedString("hello");
     }
 }

@@ -1,4 +1,4 @@
-﻿using Network.Interfaces;
+﻿using Network.Interfaces.Transporting;
 
 using Newtonsoft.Json;
 
@@ -33,7 +33,7 @@ namespace Network.Extensions
                 writer.Write(false);
 
             if (obj is IMessage message)
-                message.Write(writer);
+                message.Write(writer, transport);
         }
     }
 }

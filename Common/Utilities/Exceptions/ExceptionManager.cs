@@ -15,7 +15,7 @@ namespace Common.Utilities.Exceptions
         private static LockedList<Exception> allExceptions = new LockedList<Exception>();
         private static LockedList<Exception> unhandledExceptions = new LockedList<Exception>();
 
-        public static ExceptionSettings Settings { get; set; } = ExceptionSettings.LogUnhandled;
+        public static ExceptionSettings Settings { get; set; } = ExceptionSettings.LogUnhandled | ExceptionSettings.LogHandled;
 
         public static LogOutput Output { get; } = new LogOutput("Exception Manager");
 
@@ -41,9 +41,12 @@ namespace Common.Utilities.Exceptions
             Output.AddFileWithPrefix("EXCEPTIONS");
 
             Output.Info($"Initialized!");
+
+            AppDomain.CurrentDomain.FirstChanceException += OnGeneralThrown;
+            AppDomain.CurrentDomain.UnhandledException += OnUnhandledThrown;
         }
 
-        private static void OnGeneralThrown(FirstChanceExceptionEventArgs ev)
+        private static void OnGeneralThrown(object _, FirstChanceExceptionEventArgs ev)
         {
             allExceptions.Add(ev.Exception);
             OnThrown.Call(ev.Exception);
@@ -59,7 +62,7 @@ namespace Common.Utilities.Exceptions
             }
         }
 
-        private static void OnUnhandledThrown(UnhandledExceptionEventArgs ev)
+        private static void OnUnhandledThrown(object _, UnhandledExceptionEventArgs ev)
         {
             if (ev.ExceptionObject is null || ev.ExceptionObject is not Exception exception)
                 return;
