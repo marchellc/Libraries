@@ -1,143 +1,149 @@
-﻿using System.Threading.Tasks;
-using System.Threading;
-using System.Net;
+﻿using Common.Extensions;
+using Common.Reflection;
+
 using System;
+using System.Net;
+using System.Threading;
 
 using Telepathy;
 
-using Network.Logging;
-
 namespace Network.Tcp
 {
-    public class TcpClient : NetworkManager
+    public class TcpClient : IClient
     {
         private Client client;
+        private Timer timer;
         private TcpPeer peer;
-        private Thread updateThread;
-        private IPEndPoint target;
 
-        private volatile bool update;
+        private int tickRate = 100;
+        private bool isManual;
 
-        public override bool IsInitialized => client != null && updateThread != null;
-        public override bool IsRunning => client != null && (client.Connecting || client.Connected);
-        public override bool IsConnected => client != null && client.Connected;
+        public event Action<IPeer> OnConnected;
+        public event Action<IPeer> OnDisconnected;
+        public event Action<IPeer, ITransport, byte[]> OnData;
 
-        public override NetworkPeer Peer => peer;
+        public bool IsRunning => client != null;
+        public bool IsConnected => client != null && client.Connected;
 
-        public override IPEndPoint EndPoint => target;
+        public bool IsManual
+        {
+            get => isManual;
+            set
+            {
+                isManual = value;
+
+                if (isManual && timer != null)
+                {
+                    timer.Dispose();
+                    timer = null;
+                }
+                else if (!isManual && timer is null)
+                {
+                    timer = new Timer(TickTimer, null, 0, TickRate);
+                }
+            }
+        }
+
+        public int TickRate
+        {
+            get => tickRate;
+            set
+            {
+                tickRate = value;
+                timer?.Change(0, tickRate);
+            }
+        }
+
+        public IPeer Peer => peer;
+        public ITransport Transport => peer?.Transport;
+
+        public IPEndPoint Target { get; set; }
+
+        public TcpClient() { }
 
         public TcpClient(IPEndPoint endPoint)
-            => target = endPoint;
+            => Target = endPoint;
 
-        public override void Start()
+        public void Send(byte[] data)
         {
-            base.Start();
+            if (client is null || !client.Connected)
+                throw new InvalidOperationException($"Attempted to send data over an unconnected socket.");
 
-            if (client != null)
-            {
-                Disconnect();
+            client.Send(new ArraySegment<byte>(data, 0, data.Length));
+        }
+
+        public void Start()
+        {
+            if (IsRunning)
                 Stop();
-            }
 
-            NetworkLog.Add(NetworkLogLevel.Info, "CLIENT", $"Starting TCP client");
-
-            client = new Client(short.MaxValue);
+            client = new Client(short.MaxValue * 100);
             client.NoDelay = true;
+            client.OnConnected = OnConnectedHandler;
+            client.OnData = OnDataHandler;
+            client.OnDisconnected = OnDisconnectedHandler;
 
-            client.OnConnected = OnConnected;
-            client.OnDisconnected = OnDisconnected;
-            client.OnData = OnData;
+            if (!IsManual)
+                timer = new Timer(TickTimer, null, 0, TickRate);
 
-            updateThread = new Thread(async () =>
-            {
-                while (update)
-                {
-                    client.Tick(10);
-                    await Task.Delay(10);
-                }
-            });
-
-            NetworkLog.Add(NetworkLogLevel.Info, "CLIENT", $"Started TCP client");
+            client.Connect(Target.Address.ToString(), Target.Port);
         }
 
-        public override void Stop()
-        {
-            NetworkLog.Add(NetworkLogLevel.Info, "CLIENT", $"Stopping TCP client");
-
-            update = false;
-            updateThread = null;
-            client = null;
-            peer = null;
-
-            NetworkLog.Add(NetworkLogLevel.Info, "CLIENT", $"Stopped TCP client");
-        }
-
-        public override void Connect()
+        public void Stop()
         {
             if (client is null)
-                throw new InvalidOperationException($"Cannot connect client; not initialized");
+                throw new InvalidOperationException($"Attempted to stop an unconnected socket.");
 
-            NetworkLog.Add(NetworkLogLevel.Info, "CLIENT", $"Connecting to {target}");
+            if (client.Connected)
+                client.Disconnect();
 
-            update = true;
-            updateThread.Start();
+            timer.Dispose();
+            timer = null;
 
-            client.Connect(EndPoint.Address.ToString(), EndPoint.Port);
+            client.OnConnected = null;
+            client.OnData = null;
+            client.OnDisconnected = null;
+            client = null;
         }
-
-        public override void Disconnect()
+        
+        public void Tick()
         {
             if (client is null || !client.Connected)
-                throw new InvalidOperationException($"Cannot disconnect client; not initialized or not connected");
+                throw new InvalidOperationException($"Attempted to tick an unconnected socket.");
 
-            NetworkLog.Add(NetworkLogLevel.Info, "CLIENT", $"Disconnecting from {target}");
+            if (!IsManual)
+                throw new InvalidOperationException($"You need to first switch the client mode to manual before manually ticking.");
 
-            client.Disconnect();
+            client.Tick(TickRate * 100);
         }
 
-        public override void Send(int id, ArraySegment<byte> data)
+        private void OnConnectedHandler()
         {
-            base.Send(id, data);
-
-            if (client is null || !client.Connected)
-            {
-                NetworkLog.Add(NetworkLogLevel.Error, "CLIENT", $"Cannot send data; client is not initialized or not connected");
-                return;
-            }
-
-            client.Send(data);
-        }
-
-        private void OnConnected()
-        {
-            peer = new TcpPeer(0, this);
+            peer = new TcpPeer(0, this, Target);
             peer.Start();
 
-            NetworkLog.Add(NetworkLogLevel.Info, "CLIENT", $"Connected to {target}");
+            OnConnected.Call(peer);
         }
 
-        private void OnDisconnected()
+        private void OnDisconnectedHandler()
         {
-            if (peer != null)
-            {
-                peer.Stop();
-                peer = null;
-            }
+            OnDisconnected.Call(peer);
 
-            NetworkLog.Add(NetworkLogLevel.Info, "CLIENT", $"Disconnected from {target}");
-
-            Stop();
+            peer?.Stop();
+            peer = null;
         }
 
-        private void OnData(ArraySegment<byte> data)
+        private void OnDataHandler(ArraySegment<byte> data)
         {
-            if (peer is null)
-            {
-                NetworkLog.Add(NetworkLogLevel.Error, "CLIENT", $"Cannot receive data; peer is not initialized");
-                return;
-            }
+            var bytes = data.ToArray();
 
-            peer.Receive(data);
+            Transport?.Receive(bytes);
+            OnData.Call(Peer, Transport, bytes);
+        }
+
+        private void TickTimer(object _)
+        {
+            client?.Tick(TickRate * 100);
         }
     }
 }

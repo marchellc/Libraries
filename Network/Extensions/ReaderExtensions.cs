@@ -1,4 +1,6 @@
-﻿using Network.Data;
+﻿using Network.Interfaces;
+
+using Newtonsoft.Json;
 
 using System;
 using System.IO;
@@ -7,72 +9,41 @@ namespace Network.Extensions
 {
     public static class ReaderExtensions
     {
-        public static object ReadObject(this BinaryReader reader, NetworkPeer peer)
+        public static object ReadObject(this BinaryReader reader, ITransport transport)
         {
-            var types = peer.GetSyncTypes();
-            var isNull = reader.ReadBoolean();
+            if (reader is null)
+                throw new ArgumentNullException(nameof(reader));
 
-            if (isNull)
-                return null;
+            if (transport is null)
+                throw new ArgumentNullException(nameof(transport));
 
-            var typeIndex = reader.ReadInt16();
-
-            if (typeIndex < 0 || typeIndex >= types.Count)
-                throw new InvalidDataException($"Invalid type index!");
-
-            var instance = Activator.CreateInstance(types[typeIndex]);
-
-            if (instance is null)
-                throw new Exception($"Failed to create instance of type '{types[typeIndex].FullName}'");
-
-            if (instance is IReadable readable)
-                readable.Read(reader, peer);
-
-            return instance;
-        }
-
-        public static object ReadObject(this BinaryReader reader, MessageId message, NetworkPeer peer)
-        {
-            var types = peer.GetSyncTypes();
-            var isNull = reader.ReadBoolean();
-
-            if (isNull)
-                return null;
-
-            var typeIndex = message.Id;
-
-            if (typeIndex < 0 || typeIndex >= types.Count)
-                throw new InvalidDataException($"Invalid type index!");
-
-            var instance = Activator.CreateInstance(types[typeIndex]);
-
-            if (instance is null)
-                throw new Exception($"Failed to create instance of type '{types[typeIndex].FullName}'");
-
-            if (instance is IReadable readable)
-                readable.Read(reader, peer);
-
-            return instance;
-        }
-
-        public static MessageId ReadMessage(this BinaryReader reader)
-            => new MessageId
-            {
-                Header = reader.ReadByte(),
-                Channel = reader.ReadByte(),
-                Id = reader.ReadInt16(),
-                IsInternal = reader.ReadByte() == 1
-            };
-
-        public static Type ReadType(this BinaryReader reader)
-        {
-            var typeName = reader.ReadString();
-            var type = Type.GetType(typeName);
+            var typeId = reader.ReadInt16();
+            var type = transport.GetType(typeId);
 
             if (type is null)
-                throw new InvalidDataException($"Unknown type: {typeName}");
+                throw new InvalidOperationException($"Invalid type ID: {typeId}");
 
-            return type;
+            var isJson = reader.ReadBoolean();
+
+            if (isJson)
+            {
+                var jsonStr = reader.ReadString();
+                var jsonValue = JsonConvert.DeserializeObject(jsonStr, type);
+
+                if (jsonValue != null && jsonValue is IMessage message)
+                    message.Read(reader);
+
+                return jsonValue;
+            }
+            else
+            {
+                var value = Activator.CreateInstance(type);
+
+                if (value != null && value is IMessage message)
+                    message.Read(reader);
+
+                return value;
+            }
         }
     }
 }

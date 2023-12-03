@@ -55,7 +55,7 @@
       <Name>Common</Name>
     </ProjectReference>
     <ProjectReference Include="..\Network\Network.csproj">
-      <Project>{cf8a658c-38ec-43c3-b4d5-3e06b352af07}</Project>
+      <Project>{073dc8c0-1c4c-4c71-ba83-4a5ef472d63b}</Project>
       <Name>Network</Name>
     </ProjectReference>
   </ItemGroup>

@@ -4,7 +4,7 @@
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProjectGuid>{CF8A658C-38EC-43C3-B4D5-3E06B352AF07}</ProjectGuid>
+    <ProjectGuid>{073DC8C0-1C4C-4C71-BA83-4A5EF472D63B}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>Network</RootNamespace>
@@ -32,6 +32,9 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="Newtonsoft.Json, Version=13.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
+      <HintPath>..\packages\Newtonsoft.Json.13.0.3\lib\net45\Newtonsoft.Json.dll</HintPath>
+    </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="System.Xml.Linq" />
@@ -43,33 +46,27 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Attributes\NetworkTypeAttribute.cs" />
-    <Compile Include="Data\IReadable.cs" />
-    <Compile Include="Data\IWritable.cs" />
-    <Compile Include="Data\Message.cs" />
-    <Compile Include="Data\MessageChannel.cs" />
-    <Compile Include="Data\MessageId.cs" />
+    <Compile Include="Extensions\ControllerExtensions.cs" />
     <Compile Include="Extensions\ReaderExtensions.cs" />
+    <Compile Include="Extensions\TransportExtensions.cs" />
     <Compile Include="Extensions\WriterExtensions.cs" />
-    <Compile Include="Logging\NetworkLog.cs" />
-    <Compile Include="Logging\NetworkLogLevel.cs" />
-    <Compile Include="NetworkFeature.cs" />
-    <Compile Include="NetworkManager.cs" />
-    <Compile Include="NetworkPeer.cs" />
+    <Compile Include="Features\Feature.cs" />
+    <Compile Include="Interfaces\IClient.cs" />
+    <Compile Include="Interfaces\IController.cs" />
+    <Compile Include="Interfaces\IFeature.cs" />
+    <Compile Include="Interfaces\IFeatures.cs" />
+    <Compile Include="Interfaces\IMessage.cs" />
+    <Compile Include="Interfaces\IPeer.cs" />
+    <Compile Include="Interfaces\IServer.cs" />
+    <Compile Include="Interfaces\ITransport.cs" />
+    <Compile Include="IpHelper.cs" />
+    <Compile Include="Latency.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="Requests\RequestManager.cs" />
-    <Compile Include="Requests\RequestMessage.cs" />
-    <Compile Include="Requests\ResponseHandler.cs" />
-    <Compile Include="Requests\ResponseMessage.cs" />
-    <Compile Include="Requests\ResponseStatus.cs" />
-    <Compile Include="Synchronization\SynchronizationManager.cs" />
-    <Compile Include="Synchronization\SynchronizationParent.cs" />
-    <Compile Include="Synchronization\SynchronizedProperty.cs" />
-    <Compile Include="Synchronization\SynchronizedString.cs" />
     <Compile Include="Tcp\TcpClient.cs" />
     <Compile Include="Tcp\TcpPeer.cs" />
     <Compile Include="Tcp\TcpServer.cs" />
+    <Compile Include="Tcp\TcpTransport.cs" />
   </ItemGroup>
-  <ItemGroup />
   <ItemGroup>
     <ProjectReference Include="..\..\Telepathy\Telepathy\Telepathy.csproj">
       <Project>{3443b723-0527-41a8-b367-95b7fa1afedc}</Project>
@@ -79,6 +76,9 @@
       <Project>{0dcb7d50-8f0e-4569-b68c-4b32ad904469}</Project>
       <Name>Common</Name>
     </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="packages.config" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

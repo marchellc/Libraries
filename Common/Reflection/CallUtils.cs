@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Reflection;
 
 namespace Common.Reflection
 {
@@ -83,6 +84,36 @@ namespace Common.Reflection
             }
 
             return default;
+        }
+
+        public static TResult Call<TItem, TResult>(this Func<TItem, TResult> func, TItem item, Action<Exception> errorCallback = null)
+        {
+            if (func is null)
+                return default;
+
+            try
+            {
+                return func(item);
+            }
+            catch (Exception ex)
+            {
+                errorCallback.Call(ex);
+            }
+
+            return default;
+        }
+        
+        public static object Call(this MethodBase method, object instance, Action<Exception> errorCallback, params object[] args)
+        {
+            try
+            {
+                return method.Invoke(instance, args);
+            }
+            catch (Exception ex)
+            {
+                errorCallback.Call(ex);
+                return null;
+            }
         }
     }
 }

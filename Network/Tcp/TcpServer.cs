@@ -1,175 +1,193 @@
-﻿using Network.Logging;
+﻿using Common.Extensions;
+using Common.IO.Collections;
+using Common.Reflection;
+
+using Network.Interfaces;
 
 using System;
-using System.Collections.Generic;
+using System.Net;
 using System.Threading;
-using System.Threading.Tasks;
 
 using Telepathy;
 
 namespace Network.Tcp
 {
-    public class TcpServer : NetworkManager
+    public class TcpServer : IServer
     {
-        private readonly Dictionary<int, TcpPeer> peers = new Dictionary<int, TcpPeer>();
-
         private Server server;
-        private Thread tickThread;
+        private Timer timer;
 
-        private volatile bool tick;
+        private LockedList<TcpPeer> peers;
+        private LockedList<Type> features = new LockedList<Type>();
 
-        public override bool IsInitialized => server != null && tickThread != null;
-        public override bool IsRunning => server != null && server.Active;
-        public override bool IsConnected => server != null && peers.Count > 0;
+        private int tickRate = 100;
+        private bool isManual;
 
-        public int Port { get; set; } = 8080;
+        public event Action<IPeer> OnConnected;
+        public event Action<IPeer> OnDisconnected;
+        public event Action<IPeer, ITransport, byte[]> OnData;
 
-        public TcpServer(int port)
-            => Port = port;
+        public bool IsRunning => server != null;
+        public bool IsActive => server != null && server.Active;
 
-        public override void Start()
+        public bool IsManual
         {
-            base.Start();
+            get => isManual;
+            set
+            {
+                isManual = value;
 
-            NetworkLog.Add(NetworkLogLevel.Info, "SERVER", $"Initializing TCP server");
+                if (isManual && timer != null)
+                {
+                    timer.Dispose();
+                    timer = null;
+                }
+                else if (!isManual && timer is null)
+                {
+                    timer = new Timer(TickTimer, null, 0, TickRate);
+                }
+            }
+        }
 
-            if (server != null)
+        public int TickRate
+        {
+            get => tickRate;
+            set
+            {
+                tickRate = value;
+                timer?.Change(0, tickRate);
+            }
+        }
+
+        public IPEndPoint Target { get; set; }
+
+        public void Start()
+        {
+            if (IsRunning)
                 Stop();
 
-            server = new Server(short.MaxValue);
+            peers = new LockedList<TcpPeer>();
+
+            server = new Server(short.MaxValue * 100);
             server.NoDelay = true;
+            server.OnConnected = OnConnectedHandler;
+            server.OnData = OnDataHandler;
+            server.OnDisconnected = OnDisconnectedHandler;
 
-            server.OnConnected = OnConnected;
-            server.OnDisconnected = OnDisconnected;
-            server.OnData = OnData;
+            if (!IsManual)
+                timer = new Timer(TickTimer, null, 0, TickRate);
 
-            tickThread = new Thread(async () =>
-            {
-                while (tick)
-                {
-                    server.Tick(10);
-                    await Task.Delay(10);
-                }
-            });
-
-            NetworkLog.Add(NetworkLogLevel.Info, "SERVER", $"Initialized TCP server");
+            server.Start(Target.Port);
         }
 
-        public override void Stop()
+        public void Stop()
         {
-            base.Stop();
-
             if (server is null)
-                throw new InvalidOperationException($"Server cannot be stopped; not initialized");
+                throw new InvalidOperationException($"Attempted to stop an unconnected socket.");
 
-            NetworkLog.Add(NetworkLogLevel.Info, "SERVER", $"Disposing TCP server");
+            if (server.Active)
+                server.Stop();
 
-            Disconnect();
+            timer.Dispose();
+            timer = null;
 
-            tick = false;
-            tickThread = null;
-
-            server.Stop();
+            server.OnConnected = null;
+            server.OnData = null;
+            server.OnDisconnected = null;
             server = null;
 
-            NetworkLog.Add(NetworkLogLevel.Info, "SERVER", $"Disposed TCP server");
-        }
-
-        public override void Connect()
-        {
-            base.Connect();
-
-            if (server is null || server.Active)
-                throw new InvalidOperationException($"Server cannot be connected; not initialized or already started");
-
-            NetworkLog.Add(NetworkLogLevel.Info, "SERVER", $"Starting TCP server on port={Port}");
-
-            tick = true;
-            tickThread.Start();
-
-            server.Start(Port);
-
-            NetworkLog.Add(NetworkLogLevel.Info, "SERVER", $"Started TCP server on port={Port}");
-        }
-
-        public override void Disconnect()
-        {
-            base.Disconnect();
-
-            if (server is null || !server.Active)
-                throw new InvalidOperationException($"Server cannot be disconnected; not initialized or not started");
-
-            NetworkLog.Add(NetworkLogLevel.Info, "SERVER", $"Stopping TCP server on port={Port}");
-
-            NetworkLog.Add(NetworkLogLevel.Info, "SERVER", $"Disconnecting peers ..");
-
-            foreach (var connId in peers.Keys)
-            {
-                server.Disconnect(connId);
-                NetworkLog.Add(NetworkLogLevel.Info, "SERVER", $"Disconnected peer={connId}");
-            }
-
             peers.Clear();
-
-            NetworkLog.Add(NetworkLogLevel.Info, "SERVER", $"Stopped TCP server on port={Port}");
+            peers = null;
         }
 
-        public override void Send(int id, ArraySegment<byte> data)
+        public void Tick()
         {
-            base.Send(id, data);
+            if (!IsActive)
+                throw new InvalidOperationException($"Attempted to tick an unconnected socket.");
 
-            if (server is null || !server.Active)
-            {
-                NetworkLog.Add(NetworkLogLevel.Error, "SERVER", $"Cannot send data to {id}; server not initialized or inactive");
-                return;
-            }
+            if (!IsManual)
+                throw new InvalidOperationException($"You need to first switch the server mode to manual before manually ticking.");
 
-            if (!peers.ContainsKey(id))
-            {
-                NetworkLog.Add(NetworkLogLevel.Error, "SERVER", $"Cannot send data to {id}; invalid peer ID");
-                return;
-            }
-
-            server.Send(id, data);
+            server.Tick(TickRate * 100);
         }
 
-        internal string GetAddress(int connId)
-            => server.GetClientAddress(connId);
-
-        private void OnConnected(int connId)
+        public void Send(int connectionId, byte[] data)
         {
-            var peer = new TcpPeer(connId, this);
+            if (!IsActive)
+                throw new InvalidOperationException($"Attempted to tick an unconnected socket.");
 
-            peers[connId] = peer;
+            server.Send(connectionId, data.ToSegment());
+        }
+
+        public void Disconnect(int connectionId)
+        {
+            if (!IsActive)
+                throw new InvalidOperationException($"Attempted to disconnect an unconnected socket.");
+
+            server.Disconnect(connectionId);
+        }
+
+        public void AddFeature<T>() where T : IFeature
+        {
+            if (!features.Contains(typeof(T)))
+                features.Add(typeof(T));
+        }
+
+        public void RemoveFeature<T>() where T : IFeature
+        {
+            features.Remove(typeof(T));
+        }
+
+        private void OnConnectedHandler(int connectionId)
+        {
+            var peer = new TcpPeer(connectionId, this, new IPEndPoint(IPAddress.Parse(server.GetClientAddress(connectionId)), Target.Port));
+
+            peers.Add(peer);
 
             peer.Start();
 
-            NetworkLog.Add(NetworkLogLevel.Info, "SERVER", $"Peer connected ID={connId} address={peer.Address}");
-        }
+            var type = peer.GetType();
+            var method = type.GetMethod("AddFeature");
 
-        private void OnDisconnected(int connId)
-        {
-            if (!peers.ContainsKey(connId))
+            for (int i = 0; i < features.Count; i++)
             {
-                NetworkLog.Add(NetworkLogLevel.Error, "SERVER", $"Peer ID={connId} disconnected, but was not present in the dictionary");
-                return;
+                var generic = method.MakeGenericMethod(features[i]);
+
+                generic.Call(peer, null);
             }
 
-            peers[connId].Stop();
-            peers.Remove(connId);
-
-            NetworkLog.Add(NetworkLogLevel.Info, "SERVER", $"Peer ID={connId} disconnected");
+            OnConnected.Call(peer);
         }
 
-        private void OnData(int connId, ArraySegment<byte> data)
+        private void OnDisconnectedHandler(int connectionId)
         {
-            if (!peers.ContainsKey(connId))
-            {
-                NetworkLog.Add(NetworkLogLevel.Error, "SERVER", $"Received data for peer ID={connId}, but was not present in the dictionary");
-                return;
-            }
+            var removed = peers.RemoveRange(p => p.Id == connectionId);
 
-            peers[connId].Receive(data);
+            for (int i = 0; i < removed.Count; i++)
+            {
+                OnDisconnected.Call(removed[i]);
+
+                removed[i].Stop();
+            }
+        }
+
+        private void OnDataHandler(int connectionId, ArraySegment<byte> data)
+        {
+            var bytes = data.ToArray();
+
+            for (int i = 0; i < peers.Count; i++)
+            {
+                if (peers[i].Id == connectionId)
+                {
+                    peers[i].Transport?.Receive(bytes);
+                    OnData.Call(peers[i], peers[i].Transport, bytes);
+                }
+            }
+        }
+
+        private void TickTimer(object _)
+        {
+            server?.Tick(TickRate * 100);
         }
     }
 }
