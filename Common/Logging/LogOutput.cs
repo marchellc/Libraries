@@ -1,4 +1,7 @@
-﻿using Common.Utilities;
+﻿using Common.Attributes.Custom;
+using Common.Logging.Console;
+using Common.Logging.File;
+using Common.Utilities;
 
 using System;
 using System.Collections.Generic;
@@ -13,7 +16,7 @@ namespace Common.Logging
         private string source;
         private List<ILogger> loggers;
 
-        public static LogOutput Common { get; private set; } = new LogOutput("Library");
+        public static LogOutput Common { get; private set; } 
 
         public LogOutput(string source = null)
         {
@@ -136,6 +139,13 @@ namespace Common.Logging
 
             if (Common == this)
                 Common = null;
+        }
+
+        internal static void Init()
+        {
+            Common = new LogOutput("Library");
+            Common.AddConsoleIfPresent();
+            Common.AddFileWithPrefix("General Log");
         }
     }
 }

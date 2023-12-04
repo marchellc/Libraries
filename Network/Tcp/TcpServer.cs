@@ -14,6 +14,8 @@ using System.Threading;
 using System.Linq;
 
 using Telepathy;
+using Common.Logging.Console;
+using Common.Logging.File;
 
 namespace Network.Tcp
 {
@@ -89,7 +91,7 @@ namespace Network.Tcp
                 throw new InvalidOperationException($"Cannot bind the server to a null target!");
 
             peers = new LockedDictionary<int, TcpPeer>();
-            log = new LogOutput($"Server {Target.Port}").Setup();
+            log = new LogOutput($"Server {Target.Port}").AddConsoleIfPresent().AddFileWithPrefix($"Server_{Target.Port}");
 
             log.Info("Starting ..");
 

@@ -47,7 +47,7 @@ namespace Common.Logging
             get
             {
                 var time = DateTime.Now;
-                return $"{time.Day}_{time.Month}_{time.Year} {time.Hour}_{time.Minute}";
+                return $"{time.Day}_{time.Month}_{time.Year}_{time.Hour}_{time.Minute}_{time.Ticks}";
             }
         }
 
@@ -64,7 +64,7 @@ namespace Common.Logging
         public static string GetFilePath(string fileNamePrefix)
         {
             var appDataDir = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-            var genLogDir = $"{appDataDir}/common_library_logs";
+            var genLogDir = $"{appDataDir}/Common Library Logs";
 
             if (!Directory.Exists(genLogDir))
                 Directory.CreateDirectory(genLogDir);

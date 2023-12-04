@@ -85,7 +85,9 @@ namespace Common.Logging.File
         private static void WriteArray(LogCharacter[] array, StringBuilder str)
         {
             for (int i = 0; i < array.Length; i++)
-                str.Append(array[i]);
+                str.Append(array[i].Character);
+
+            str.Append(' ');
         }
     }
 }

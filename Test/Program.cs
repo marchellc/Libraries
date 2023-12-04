@@ -1,14 +1,15 @@
-﻿using System.Net;
+﻿using System.IO;
+using System.Net;
 using System.Linq;
 using System.Threading.Tasks;
 
 using Network.Tcp;
 using Network.Extensions;
 
-using Common.Logging;
-
 using Network.Synchronization;
 using Network.Requests;
+using Network.Interfaces.Transporting;
+using Common.Logging;
 
 namespace Test
 {
@@ -27,11 +28,11 @@ namespace Test
 
                 server.OnConnected += peer =>
                 {
-                    var sync = peer.Features.GetFeature<SynchronizationManager>();
+                    var req = peer.Features.GetFeature<RequestManager>();
 
-                    sync.CreateHandler<TestRoot>(root =>
+                    req.CreateHandler<TestRequestMessage>((reqInfo, msg) =>
                     {
-                        LogOutput.Common.Info($"test root created");
+                        reqInfo.Success(new TestResponseMessage { Number = msg.Number + 5 });
                     });
                 };
 
@@ -40,27 +41,23 @@ namespace Test
             else
             {
                 var client = new TcpClient(new IPEndPoint(IPAddress.Loopback, 7777));
+                var number = 5;
+                var expected = 10;
 
                 client.Features.AddFeature<SynchronizationManager>();
                 client.Features.AddFeature<RequestManager>();
 
                 client.OnConnected += peer =>
                 {
-                    var sync = peer.Features.GetFeature<SynchronizationManager>();
+                    var req = peer.Features.GetFeature<RequestManager>();
 
-                    sync.OnReady += () =>
+                    req.Request<TestRequestMessage, TestResponseMessage>(new TestRequestMessage { Number = number }, 0, (res, msg) => 
                     {
-                        var root = sync.Create<TestRoot>();
-
-                        Task.Run(async () =>
-                        {
-                            for (int i = 0; i < int.MaxValue; i++)
-                            {
-                                await Task.Delay(1000);
-                                root.Word.Value = i;
-                            }
-                        });
-                    };
+                        if (msg.Number != expected)
+                            LogOutput.Common.Error("Not the expected number");
+                        else
+                            LogOutput.Common.Info("Expected number");
+                    });
                 };
 
                 client.Start();
@@ -70,13 +67,33 @@ namespace Test
         }
     }
 
-    public class TestRoot : SynchronizedRoot
+    public struct TestRequestMessage : IMessage
     {
-        public TestRoot()
+        public int Number;
+
+        public void Read(BinaryReader reader, ITransport transport)
         {
-            LogOutput.Common.Info("Root created!");
+            Number = reader.ReadInt32();
         }
 
-        public SynchronizedDelegatedValue<int> Word { get; set; } = new SynchronizedDelegatedValue<int>(br => br.ReadInt32(), (bw, i) => bw.Write(i), 0);
+        public void Write(BinaryWriter writer, ITransport transport)
+        {
+            writer.Write(Number);
+        }
+    }
+
+    public struct TestResponseMessage : IMessage
+    {
+        public int Number;
+
+        public void Read(BinaryReader reader, ITransport transport)
+        {
+            Number = reader.ReadInt32();
+        }
+
+        public void Write(BinaryWriter writer, ITransport transport)
+        {
+            writer.Write(Number);
+        }
     }
 }

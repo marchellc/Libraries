@@ -12,6 +12,7 @@ using Common.Reflection;
 using Common.Extensions;
 
 using System.Collections.Generic;
+using System.Linq;
 
 namespace Network.Requests
 {
@@ -20,6 +21,7 @@ namespace Network.Requests
         public const byte REQ_BYTE = 10;
         public const byte RES_BYTE = 11;
 
+        private LockedList<byte> received;
         private LockedDictionary<byte, RequestCache> requests;
         private LockedDictionary<Type, Delegate> handlers;
 
@@ -40,7 +42,8 @@ namespace Network.Requests
             this.requests = new LockedDictionary<byte, RequestCache>(byte.MaxValue);
             this.responses = new HashSet<IResponse>(byte.MaxValue);
             this.handlers = new LockedDictionary<Type, Delegate>();
-            this.timer = new Timer(UpdateResponses, null, 0, 200);
+            this.received = new LockedList<byte>(byte.MaxValue);
+            this.timer = new Timer(UpdateResponses, null, 0, 800);
             this.requestId = 0;
 
             Transport.CreateHandler(REQ_BYTE, HandleRequest);
@@ -57,10 +60,12 @@ namespace Network.Requests
             this.requests.Clear();
             this.handlers.Clear();
             this.responses.Clear();
+            this.received.Clear();
             this.timer?.Dispose();
             this.requests = null;
             this.handlers = null;
             this.responses = null;
+            this.received = null;
             this.timer = null;
             this.requestId = 0;
 
@@ -158,6 +163,12 @@ namespace Network.Requests
         {
             var requestId = br.ReadByte();
 
+            lock (responseLock)
+            {
+                if (responses.Any(r => r.Request != null && r.Request.Id == requestId))
+                    return;
+            }
+
             if (!requests.TryGetValue(requestId, out var request))
             {
                 Log.Warn($"Received a response for an unknown request ID: {requestId}");
@@ -187,14 +198,24 @@ namespace Network.Requests
             OnResponse.Call(responseInfo);
 
             lock (responseLock)
+            {
                 responses.Add(responseInfo);
+            }
         }
 
         private void HandleRequest(BinaryReader br)
         {
+            var reqId = br.ReadByte();
+
+            if (received.Contains(reqId))
+                return;
+
+            received.Add(reqId);
+
             var request = new Request(this, 
 
-                br.ReadByte(), 
+                reqId, 
+
                 br.ReadDate(), 
 
                 DateTime.Now, 
@@ -229,7 +250,7 @@ namespace Network.Requests
 
                     if (responseObject is null || responseObject is not IMessage)
                     {
-                        Log.Info($"Request Handler returned a null or not an IMessage, sending failed response.");
+                        Log.Debug($"Request Handler returned a null or not an IMessage, sending failed response.");
 
                         Transport.Send(RES_BYTE, bw =>
                         {
@@ -242,7 +263,7 @@ namespace Network.Requests
                     }
                     else
                     {
-                        Log.Info($"Request Handler returned a valid value, sending Ok response.");
+                        Log.Debug($"Request Handler returned a valid value, sending Ok response.");
 
                         Transport.Send(RES_BYTE, bw =>
                         {
@@ -271,6 +292,8 @@ namespace Network.Requests
                     Log.Error($"Failed to invoke request handler '{handlerType.FullName}' ({handler.Method.Name}):\n{ex}");
                 }
             }
+
+            received.Remove(reqId);
         }
 
         private void UpdateResponses(object _)
@@ -296,6 +319,9 @@ namespace Network.Requests
             {
                 foreach (var response in responses)
                 {
+                    if (response.IsHandled)
+                        continue;
+
                     if (response.Request is null)
                     {
                         Log.Warn($"Found a response with a null request!");
@@ -320,7 +346,8 @@ namespace Network.Requests
                     }
                     else
                     {
-                        Log.Warn($"Received a response with a missing request! ({response.Request.Id})");
+                        Log.Warn($"Processing a response with a missing request! ({response.Request.Id})");
+                        continue;
                     }
 
                     requests.Remove(response.Request.Id);

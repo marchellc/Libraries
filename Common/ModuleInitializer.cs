@@ -24,12 +24,12 @@ namespace Common
 
         public static void Initialize()
         {
+            LogOutput.Init();
+
             Assembly = Assembly.GetExecutingAssembly();
 
-            LogOutput.Common.AddConsoleIfPresent();
-            LogOutput.Common.AddFileWithPrefix("GENERAL");
-
             AttributeCollector.Collect();
+
             AttributeCollector.ForEach<InitAttribute>((data, attr) =>
             {
                 if (data.Member is null || data.Member is not MethodBase method)
@@ -42,6 +42,7 @@ namespace Common
             });
 
             InitializedAt = DateTime.Now;
+
             OnInitialized.Call();
 
             LogOutput.Common.Info($"Library initialized!");

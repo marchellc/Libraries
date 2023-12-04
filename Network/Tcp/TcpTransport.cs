@@ -46,7 +46,7 @@ namespace Network.Tcp
         {
             this.peer = peer;
             this.controller = controller;
-            this.log = new LogOutput($"TRANSPORT_{peer.Target}").Setup();
+            this.log = new LogOutput($"Transport ({peer.Id} - {peer.Target.Port})").Setup();
             this.typeHandlers = new LockedDictionary<Type, LockedList<WrappedAction<Delegate>>>();
             this.msgHandlers = new LockedDictionary<byte, List<Action<BinaryReader>>>();
             this.syncedTypes = new LockedList<Type>();

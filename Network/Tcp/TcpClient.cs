@@ -175,6 +175,9 @@ namespace Network.Tcp
 
         private void OnConnectedHandler()
         {
+            if (peer != null)
+                return;
+
             connTimer?.Dispose();
             connTimer = null;
 
