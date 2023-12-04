@@ -172,7 +172,7 @@ namespace Common.Logging
                     return ConsoleColor.DarkRed;
 
                 case LogLevel.Error:
-                    return ConsoleColor.Red;
+                    return ConsoleColor.White;
 
                 case LogLevel.Warning:
                     return ConsoleColor.Yellow;

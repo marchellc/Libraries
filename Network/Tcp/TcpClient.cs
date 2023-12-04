@@ -26,6 +26,12 @@ namespace Network.Tcp
         private ControllerFeatureManager features;
 
         private int tickRate = 100;
+
+        private volatile int maxAttempts;
+        private volatile int curAttempt;
+
+        private volatile Timer connTimer;
+
         private bool isManual;
 
         public event Action<IPeer> OnConnected;
@@ -117,9 +123,10 @@ namespace Network.Tcp
             if (!IsManual)
                 timer = new Timer(TickTimer, null, 0, TickRate);
 
-            log.Info("Connecting ..");
+            curAttempt = 0;
+            maxAttempts = 30;
 
-            client.Connect(Target.Address.ToString(), Target.Port);
+            TryConnect();
         }
 
         public void Stop()
@@ -134,6 +141,12 @@ namespace Network.Tcp
 
             timer.Dispose();
             timer = null;
+
+            connTimer?.Dispose();
+            connTimer = null;
+
+            curAttempt = 0;
+            maxAttempts = 30;
 
             Log.Info = _ => { };
             Log.Error = _ => { };
@@ -162,6 +175,11 @@ namespace Network.Tcp
 
         private void OnConnectedHandler()
         {
+            connTimer?.Dispose();
+            connTimer = null;
+
+            log.Debug($"Connected, timer disposed.");
+
             peer = new TcpPeer(0, this, Target);
 
             peer.Start();
@@ -170,16 +188,27 @@ namespace Network.Tcp
             OnConnected.Call(peer);
 
             log.Info($"Connected to server");
+
+            curAttempt = 0;
+            maxAttempts = 30;
         }
 
         private void OnDisconnectedHandler()
         {
+            if (peer is null)
+                return;
+
             OnDisconnected.Call(peer);
 
             peer?.Stop();
             peer = null;
 
-            log.Info("Disconnected from server");
+            log.Warn("Disconnected from server, attempting to reconnect.");
+
+            maxAttempts = 15;
+            curAttempt = 0;
+
+            TryConnect();
         }
 
         private void OnDataHandler(ArraySegment<byte> data)
@@ -194,6 +223,53 @@ namespace Network.Tcp
         private void TickTimer(object _)
         {
             client?.Tick(TickRate * 100);
+        }
+
+        private void TryConnect()
+        {
+            if (client is null || client.Connected)
+                return;
+
+            while (client.Connecting)
+                continue;
+
+            if (curAttempt >= maxAttempts)
+            {
+                log.Error($"Connection attempts count reached, retrying in 30 seconds.");
+
+                connTimer = new Timer(_ =>
+                {
+                    curAttempt = 0;
+
+                    connTimer.Dispose();
+                    connTimer = null;
+
+                    log.Debug($"Timer disposed, retrying connection.");
+
+                    TryConnect();
+                }, null, 30000, 30000);
+
+                return;
+            }
+
+            client.Connect(Target.Address.ToString(), Target.Port,
+
+            () =>
+            {
+                curAttempt = 0;
+                maxAttempts = 30;
+
+                log.Info("Succesfully connected!");
+            },
+            
+            () =>
+            {
+                log.Error($"Connection failed, retrying ({curAttempt + 1} / {maxAttempts}) ..");
+
+                curAttempt++;
+
+                TryConnect();
+            });
         }
     }
 }
