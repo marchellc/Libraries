@@ -1,5 +1,4 @@
-﻿using System.IO;
-using System.Net;
+﻿using System.Net;
 using System.Linq;
 using System.Threading.Tasks;
 
@@ -7,7 +6,9 @@ using Network.Tcp;
 using Network.Extensions;
 
 using Common.Logging;
+
 using Network.Synchronization;
+using Network.Requests;
 
 namespace Test
 {
@@ -21,16 +22,17 @@ namespace Test
 
                 server.TrySetAddress(IPAddress.Any, 7777);
 
+                server.Features.AddFeature<SynchronizationManager>();
+                server.Features.AddFeature<RequestManager>();
+
                 server.OnConnected += peer =>
                 {
-                    var sync = peer.AddFeature<SynchronizationManager>();
+                    var sync = peer.Features.GetFeature<SynchronizationManager>();
 
                     sync.CreateHandler<TestRoot>(root =>
                     {
                         LogOutput.Common.Info($"test root created");
                     });
-
-                    LogOutput.Common.Info("sync ready");
                 };
 
                 server.Start();
@@ -39,11 +41,26 @@ namespace Test
             {
                 var client = new TcpClient(new IPEndPoint(IPAddress.Loopback, 7777));
 
+                client.Features.AddFeature<SynchronizationManager>();
+                client.Features.AddFeature<RequestManager>();
+
                 client.OnConnected += peer =>
                 {
-                    var sync = peer.AddFeature<SynchronizationManager>();
+                    var sync = peer.Features.GetFeature<SynchronizationManager>();
 
-                    sync.Create<TestRoot>().Word.Value = "there";
+                    sync.OnReady += () =>
+                    {
+                        var root = sync.Create<TestRoot>();
+
+                        Task.Run(async () =>
+                        {
+                            for (int i = 0; i < int.MaxValue; i++)
+                            {
+                                await Task.Delay(1000);
+                                root.Word.Value = i;
+                            }
+                        });
+                    };
                 };
 
                 client.Start();
@@ -55,6 +72,11 @@ namespace Test
 
     public class TestRoot : SynchronizedRoot
     {
-        public SynchronizedString Word { get; } = new SynchronizedString("hello");
+        public TestRoot()
+        {
+            LogOutput.Common.Info("Root created!");
+        }
+
+        public SynchronizedDelegatedValue<int> Word { get; set; } = new SynchronizedDelegatedValue<int>(br => br.ReadInt32(), (bw, i) => bw.Write(i), 0);
     }
 }

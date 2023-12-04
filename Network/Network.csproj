@@ -50,10 +50,13 @@
     <Compile Include="Extensions\ReaderExtensions.cs" />
     <Compile Include="Extensions\TransportExtensions.cs" />
     <Compile Include="Extensions\WriterExtensions.cs" />
+    <Compile Include="Features\ControllerFeatureManager.cs" />
     <Compile Include="Features\Feature.cs" />
+    <Compile Include="Features\PeerFeatureManager.cs" />
     <Compile Include="Interfaces\Controllers\IClient.cs" />
     <Compile Include="Interfaces\Controllers\IController.cs" />
     <Compile Include="Interfaces\Features\IFeature.cs" />
+    <Compile Include="Interfaces\Features\IFeatureManager.cs" />
     <Compile Include="Interfaces\Requests\IRequest.cs" />
     <Compile Include="Interfaces\Requests\IRequestManager.cs" />
     <Compile Include="Interfaces\Requests\IResponse.cs" />

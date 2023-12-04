@@ -1,6 +1,4 @@
 ﻿using Network.Interfaces.Features;
-
-using System;
 using System.Net;
 
 namespace Network.Interfaces.Controllers
@@ -12,17 +10,12 @@ namespace Network.Interfaces.Controllers
 
         IPEndPoint Target { get; set; }
 
+        IFeatureManager Features { get; }
+
         int TickRate { get; set; }
 
         void Start();
         void Stop();
         void Tick();
-
-        void RemoveFeature<T>() where T : IFeature;
-
-        T AddFeature<T>() where T : IFeature, new();
-        T GetFeature<T>() where T : IFeature;
-
-        Type[] GetFeatures();
     }
 }

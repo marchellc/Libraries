@@ -1,9 +1,10 @@
 ﻿using Common.Extensions;
 using Common.Reflection;
-using Common.IO.Collections;
+using Common.Logging;
 
 using System;
 using System.Net;
+using System.Linq;
 using System.Threading;
 
 using Telepathy;
@@ -11,8 +12,7 @@ using Telepathy;
 using Network.Interfaces.Controllers;
 using Network.Interfaces.Transporting;
 using Network.Interfaces.Features;
-using System.Linq;
-using Common.Logging;
+using Network.Features;
 
 namespace Network.Tcp
 {
@@ -23,10 +23,10 @@ namespace Network.Tcp
         private TcpPeer peer;
         private LogOutput log;
 
+        private ControllerFeatureManager features;
+
         private int tickRate = 100;
         private bool isManual;
-
-        private LockedList<Type> features = new LockedList<Type>();
 
         public event Action<IPeer> OnConnected;
         public event Action<IPeer> OnDisconnected;
@@ -66,13 +66,20 @@ namespace Network.Tcp
 
         public IPeer Peer => peer;
         public ITransport Transport => peer?.Transport;
+        public IFeatureManager Features => features;
 
         public IPEndPoint Target { get; set; }
 
-        public TcpClient() { }
+        public TcpClient() 
+        {
+            features = new ControllerFeatureManager();
+        }
 
         public TcpClient(IPEndPoint endPoint)
-            => Target = endPoint;
+        {
+            Target = endPoint;
+            features = new ControllerFeatureManager();
+        }
 
         public void Send(byte[] data)
         {
@@ -87,18 +94,25 @@ namespace Network.Tcp
             if (IsRunning)
                 Stop();
 
-            log = new LogOutput($"CLIENT_{Target}").Setup();
+            if (Target is null)
+                throw new InvalidOperationException($"Cannot start the client with a null target.");
+
+            log = new LogOutput($"Client {Target.Port}").Setup();
             log.Info("Initializing KCP client");
                 
             client = new Client(short.MaxValue * 100);
+
             client.NoDelay = true;
+
             client.OnConnected = OnConnectedHandler;
             client.OnData = OnDataHandler;
             client.OnDisconnected = OnDisconnectedHandler;
 
-            Log.Info = LogOutput.Common.Info;
-            Log.Error = LogOutput.Common.Error;
-            Log.Warning = LogOutput.Common.Warn;
+            Log.Info = log.Info;
+            Log.Error = log.Error;
+            Log.Warning = log.Warn;
+
+            features.Enable(null);
 
             if (!IsManual)
                 timer = new Timer(TickTimer, null, 0, TickRate);
@@ -116,8 +130,14 @@ namespace Network.Tcp
             if (client.Connected)
                 client.Disconnect();
 
+            features.Disable();
+
             timer.Dispose();
             timer = null;
+
+            Log.Info = _ => { };
+            Log.Error = _ => { };
+            Log.Warning = _ => { };
 
             log.Dispose();
             log = null;
@@ -125,6 +145,7 @@ namespace Network.Tcp
             client.OnConnected = null;
             client.OnData = null;
             client.OnDisconnected = null;
+
             client = null;
         }
         
@@ -139,41 +160,12 @@ namespace Network.Tcp
             client.Tick(TickRate * 100);
         }
 
-        public T AddFeature<T>() where T : IFeature, new()
-        {
-            if (!features.Contains(typeof(T)))
-                features.Add(typeof(T));
-
-            return peer != null ? peer.AddFeature<T>() : default;
-        }
-
-        public void RemoveFeature<T>() where T : IFeature
-        {
-            features.Remove(typeof(T));
-            peer?.RemoveFeature<T>();
-        }
-
-        public T GetFeature<T>() where T : IFeature
-            => peer != null ? peer.GetFeature<T>() : default;
-
-        public Type[] GetFeatures()
-            => features.ToArray();
-
         private void OnConnectedHandler()
         {
             peer = new TcpPeer(0, this, Target);
 
-            var type = peer.GetType();
-            var method = type.GetMethod("AddFeature");
-
-            for (int i = 0; i < features.Count; i++)
-            {
-                var generic = method.MakeGenericMethod(features[i]);
-
-                generic.Call(peer, null);
-            }
-
             peer.Start();
+            peer.Features?.Enable(features);
 
             OnConnected.Call(peer);
 
@@ -195,6 +187,7 @@ namespace Network.Tcp
             var bytes = data.ToArray();
 
             Transport?.Receive(bytes);
+
             OnData.Call(Peer, Transport, bytes);
         }
 

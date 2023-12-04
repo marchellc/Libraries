@@ -16,16 +16,22 @@ namespace Network.Synchronization
     public class SynchronizationManager : Feature, ISynchronizationManager
     {
         public const byte CREATE_ROOT_REQ = 25;
+
         public const byte DESTROY_ROOT_REQ = 28;
+
         public const byte UPDATE_VALUE_REQ = 26;
         public const byte UPDATE_ROOT_TYPES_REQ = 27;
         public const byte UPDATE_ROOT_TYPES_RES = 29;
 
+        public const byte UPDATE_ROOT_TYPES_RES_CONF = 30;
+
         private LockedList<ISynchronizedRoot> roots;
         private LockedList<Type> rootTypes;
+
         private LockedDictionary<Type, LockedList<Delegate>> creationHandlers = new LockedDictionary<Type, LockedList<Delegate>>();
 
         private short rootId;
+        private bool isSynced;
 
         public IEnumerable<ISynchronizedRoot> Roots => roots;
 
@@ -34,6 +40,8 @@ namespace Network.Synchronization
         public override void OnStarted()
         {
             base.OnStarted();
+
+            OnReady += () => Log.Info("Ready!");
 
             roots = new LockedList<ISynchronizedRoot>();
             rootTypes = new LockedList<Type>();
@@ -44,11 +52,16 @@ namespace Network.Synchronization
             Transport.CreateHandler(UPDATE_ROOT_TYPES_REQ, HandleRootTypesSyncRequest);
             Transport.CreateHandler(UPDATE_ROOT_TYPES_RES, HandleRootTypesSyncResponse);
             Transport.CreateHandler(UPDATE_VALUE_REQ, HandleValueUpdate);
+            Transport.CreateHandler(UPDATE_ROOT_TYPES_RES_CONF, HandleRootTypesSyncResponseConfirmation);
+
             Transport.CreateHandler(CREATE_ROOT_REQ, HandleRootCreate);
+
             Transport.CreateHandler(DESTROY_ROOT_REQ, HandleRootDestroy);
 
             if (Controller is IServer)
+            {
                 Transport.Send(UPDATE_ROOT_TYPES_REQ, null);
+            }
             else
             {
                 var assemblies = AppDomain.CurrentDomain.GetAssemblies();
@@ -87,10 +100,15 @@ namespace Network.Synchronization
 
             rootId = 0;
 
+            isSynced = false;
+
             Transport.RemoveHandler(UPDATE_ROOT_TYPES_REQ, HandleRootTypesSyncRequest);
             Transport.RemoveHandler(UPDATE_ROOT_TYPES_RES, HandleRootTypesSyncResponse);
             Transport.RemoveHandler(UPDATE_VALUE_REQ, HandleValueUpdate);
+            Transport.RemoveHandler(UPDATE_ROOT_TYPES_RES_CONF, HandleRootTypesSyncResponseConfirmation);
+
             Transport.RemoveHandler(CREATE_ROOT_REQ, HandleRootCreate);
+
             Transport.RemoveHandler(DESTROY_ROOT_REQ, HandleRootDestroy);
 
             base.OnStopped();
@@ -99,20 +117,32 @@ namespace Network.Synchronization
         public TRoot Create<TRoot>() where TRoot : ISynchronizedRoot, new()
         {
             if (!rootTypes.Contains(typeof(TRoot)))
-                throw new InvalidOperationException($"The client is missing root type '{typeof(TRoot).FullName}'");
+            {
+                Log.Error($"Unrecognized root type!");
+                return default;
+            }
 
             var root = new TRoot();
 
             if (root is not SynchronizedRoot syncRoot)
-                throw new InvalidOperationException($"This manager requires a SynchronizedRoot.");
+            {
+                Log.Error($"Requested root type is invalid");
+                return default;
+            }
 
-            syncRoot.manager = this;
-            syncRoot.id = GetNextId();
-            syncRoot.OnCreated();
+            try
+            {
+                syncRoot.manager = this;
+                syncRoot.id = GetNextId();
+                syncRoot.OnCreated();
+            }
+            catch (Exception ex)
+            {
+                Log.Error($"Failed to update root!\n{ex}");
+                return default;
+            }
 
             roots.Add(syncRoot);
-
-            Log.Debug($"Created a new synchronization root: {typeof(TRoot).FullName}");
 
             Transport.Send(CREATE_ROOT_REQ, bw =>
             {
@@ -128,9 +158,8 @@ namespace Network.Synchronization
             if (!roots.Contains(root))
                 return;
 
-            Log.Debug($"Destroyed root: {root.Id}");
-
             root.OnDestroyed();
+
             roots.Remove(root);
         }
 
@@ -138,8 +167,6 @@ namespace Network.Synchronization
         {
             if (value.Root is null)
                 return;
-
-            Log.Debug($"Updating value: {value.Id} ({value.Root.Id})");
 
             Transport.Send(UPDATE_VALUE_REQ, bw =>
             {
@@ -171,8 +198,6 @@ namespace Network.Synchronization
 
         private void HandleRootCreate(BinaryReader reader)
         {
-            Log.Debug($"Received a root creation request");
-
             var rootType = rootTypes[reader.ReadInt16()];
             var root = Activator.CreateInstance(rootType) as ISynchronizedRoot;
 
@@ -192,8 +217,6 @@ namespace Network.Synchronization
 
         private void HandleRootDestroy(BinaryReader reader)
         {
-            Log.Debug($"Received a root destruction request");
-
             var rootId = reader.ReadInt16();
             var root = roots.FirstOrDefault(r => r.Id == rootId);
 
@@ -207,24 +230,35 @@ namespace Network.Synchronization
         private void HandleRootTypesSyncRequest(BinaryReader reader)
         {
             Transport.Send(UPDATE_ROOT_TYPES_RES, bw => bw.WriteItems(rootTypes, t => bw.WriteType(t)));
-
-            Log.Debug($"Sent a root type sync response");
         }
 
         private void HandleRootTypesSyncResponse(BinaryReader reader)
         {
+            if (isSynced)
+                return;
+
+            isSynced = true;
+
             rootTypes.Clear();
             rootTypes.AddRange(reader.ReadArray(true, reader.ReadType));
 
-            Log.Debug($"Received a root type sync response ({rootTypes.Count})");
+            OnReady?.Invoke();
+
+            Transport.Send(UPDATE_ROOT_TYPES_RES_CONF, null);
+        }
+
+        private void HandleRootTypesSyncResponseConfirmation(BinaryReader reader)
+        {
+            if (isSynced)
+                return;
+
+            isSynced = true;
 
             OnReady?.Invoke();
         }
 
         private void HandleValueUpdate(BinaryReader reader)
         {
-            Log.Debug($"Received a value update request");
-
             var rootId = reader.ReadInt16();
             var valueId = reader.ReadInt16();
 
@@ -239,8 +273,6 @@ namespace Network.Synchronization
                 return;
 
             value.Update(reader);
-
-            Log.Debug($"Updated value: {value.Id} ({value.Root.Id})");
         }
 
         private short GetNextId()

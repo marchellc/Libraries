@@ -37,7 +37,7 @@ namespace Network.Features
 
             this.isRunning = true;
             
-            Log = new LogOutput($"{GetType().Name} :: {peer.Id}").Setup();
+            Log = new LogOutput($"{GetType().Name} ({peer.Id} - {peer.Target.Port})").Setup();
 
             try
             {

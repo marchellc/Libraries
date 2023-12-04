@@ -1,10 +1,12 @@
 ﻿using Common.Extensions;
 using Common.IO.Collections;
 using Common.Reflection;
+using Common.Logging;
 
 using Network.Interfaces.Controllers;
 using Network.Interfaces.Transporting;
 using Network.Interfaces.Features;
+using Network.Features;
 
 using System;
 using System.Net;
@@ -12,7 +14,6 @@ using System.Threading;
 using System.Linq;
 
 using Telepathy;
-using Common.Logging;
 
 namespace Network.Tcp
 {
@@ -21,9 +22,9 @@ namespace Network.Tcp
         private Server server;
         private Timer timer;
         private LogOutput log;
+        private ControllerFeatureManager features;
 
-        private LockedList<TcpPeer> peers;
-        private LockedList<Type> features = new LockedList<Type>();
+        private LockedDictionary<int, TcpPeer> peers;
 
         private int tickRate = 100;
         private bool isManual;
@@ -64,27 +65,47 @@ namespace Network.Tcp
             }
         }
 
+        public IFeatureManager Features => features;
+
         public IPEndPoint Target { get; set; }
+
+        public TcpServer()
+        {
+            features = new ControllerFeatureManager();
+        }
+
+        public TcpServer(IPEndPoint endPoint)
+        {
+            Target = endPoint;
+            features = new ControllerFeatureManager();
+        }
 
         public void Start()
         {
             if (IsRunning)
                 Stop();
 
-            peers = new LockedList<TcpPeer>();
-            log = new LogOutput($"SERVER :: {Target.Port}").Setup();
+            if (Target is null)
+                throw new InvalidOperationException($"Cannot bind the server to a null target!");
+
+            peers = new LockedDictionary<int, TcpPeer>();
+            log = new LogOutput($"Server {Target.Port}").Setup();
 
             log.Info("Starting ..");
 
             server = new Server(short.MaxValue * 100);
+
             server.NoDelay = true;
+
             server.OnConnected = OnConnectedHandler;
             server.OnData = OnDataHandler;
             server.OnDisconnected = OnDisconnectedHandler;
 
-            Log.Info = LogOutput.Common.Info;
-            Log.Error = LogOutput.Common.Error;
-            Log.Warning = LogOutput.Common.Warn;
+            features.Enable(null);
+
+            Log.Info = log.Info;
+            Log.Error = log.Error;
+            Log.Warning = log.Warn;
 
             if (!IsManual)
                 timer = new Timer(TickTimer, null, 0, TickRate);
@@ -102,8 +123,14 @@ namespace Network.Tcp
             if (server.Active)
                 server.Stop();
 
+            features.Disable();
+
             timer.Dispose();
             timer = null;
+
+            Log.Info = str => { };
+            Log.Error = str => { };
+            Log.Warning = str => { };
 
             log.Dispose();
             log = null;
@@ -144,35 +171,15 @@ namespace Network.Tcp
             server.Disconnect(connectionId);
         }
 
-        public T AddFeature<T>() where T : IFeature, new()
-        {
-            if (!features.Contains(typeof(T)))
-                features.Add(typeof(T));
-
-            return default;
-        }
-
-        public T GetFeature<T>() where T : IFeature
-            => default;
-
-        public void RemoveFeature<T>() where T : IFeature
-        {
-            features.Remove(typeof(T));
-        }
-
-        public Type[] GetFeatures()
-            => features.ToArray();
-
         private void OnConnectedHandler(int connectionId)
         {
-            if (peers.Any(p => p.Id == connectionId))
+            if (peers.ContainsKey(connectionId))
                 return;
 
-            var peer = new TcpPeer(connectionId, this, server.GetClientEndPoint(connectionId));
-
-            peers.Add(peer);
+            var peer = peers[connectionId] = new TcpPeer(connectionId, this, server.GetClientEndPoint(connectionId));
 
             peer.Start();
+            peer.Features?.Enable(features);
 
             OnConnected.Call(peer);
 
@@ -181,30 +188,26 @@ namespace Network.Tcp
 
         private void OnDisconnectedHandler(int connectionId)
         {
-            var removed = peers.RemoveRange(p => p.Id == connectionId);
+            if (!peers.TryGetValue(connectionId, out var peer))
+                return;
 
-            for (int i = 0; i < removed.Count; i++)
-            {
-                log.Info($"Client disconnected from {removed[i].Target}");
+            peer.Stop();
 
-                OnDisconnected.Call(removed[i]);
+            peers.Remove(connectionId);
 
-                removed[i].Stop();
-            }
+            OnDisconnected.Call(peer);
         }
 
         private void OnDataHandler(int connectionId, ArraySegment<byte> data)
         {
+            if (!peers.TryGetValue(connectionId, out var peer))
+                return;
+
             var bytes = data.ToArray();
 
-            for (int i = 0; i < peers.Count; i++)
-            {
-                if (peers[i].Id == connectionId)
-                {
-                    peers[i].Transport?.Receive(bytes);
-                    OnData.Call(peers[i], peers[i].Transport, bytes);
-                }
-            }
+            OnData.Call(peer, peer.Transport, bytes);
+
+            peer.Transport?.Receive(bytes);
         }
 
         private void TickTimer(object _)

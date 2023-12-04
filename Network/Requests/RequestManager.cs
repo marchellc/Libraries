@@ -9,8 +9,8 @@ using System.Threading;
 
 using Common.IO.Collections;
 using Common.Reflection;
-using Common.Logging;
 using Common.Extensions;
+
 using System.Collections.Generic;
 
 namespace Network.Requests
@@ -28,8 +28,6 @@ namespace Network.Requests
 
         private Timer timer;
 
-        private LogOutput log;
-
         private byte requestId;
 
         public event Action<IRequest> OnRequest;
@@ -43,13 +41,12 @@ namespace Network.Requests
             this.responses = new HashSet<IResponse>(byte.MaxValue);
             this.handlers = new LockedDictionary<Type, Delegate>();
             this.timer = new Timer(UpdateResponses, null, 0, 200);
-            this.log = new LogOutput($"REQUESTS : {Peer.Id}").Setup();
             this.requestId = 0;
 
             Transport.CreateHandler(REQ_BYTE, HandleRequest);
             Transport.CreateHandler(RES_BYTE, HandleResponse);
 
-            this.log.Info($"Started.");
+            Log.Info($"Started!");
         }
 
         public override void OnStopped()
@@ -61,13 +58,13 @@ namespace Network.Requests
             this.handlers.Clear();
             this.responses.Clear();
             this.timer?.Dispose();
-            this.log?.Dispose();
             this.requests = null;
             this.handlers = null;
             this.responses = null;
             this.timer = null;
-            this.log = null;
             this.requestId = 0;
+
+            Log.Info("Stopped!");
         }
 
         public void CreateHandler<T, TResponse>(Func<IRequest, T, TResponse> handler)
@@ -121,6 +118,8 @@ namespace Network.Requests
                 bw.WriteObject(requestInfo.Object, Transport);
             });
 
+            Log.Debug($"Sent request of ID {requestId} ({typeof(T).FullName})");
+
             return requestInfo;
         }
 
@@ -142,6 +141,8 @@ namespace Network.Requests
 
             request.OnResponded(responseInfo);
 
+            Log.Debug($"Sent a response to request of ID '{request.Id}' ({typeof(T).FullName})");
+
             return responseInfo;
         }
 
@@ -159,12 +160,14 @@ namespace Network.Requests
 
             if (!requests.TryGetValue(requestId, out var request))
             {
-                log.Warn($"Received a response for an unknown request ID: {requestId}");
+                Log.Warn($"Received a response for an unknown request ID: {requestId}");
                 return;
             }
 
             var responseSent = br.ReadDate();
             var responseStatus = (ResponseStatus)br.ReadByte();
+
+            Log.Debug($"Received response for request {requestId}: {responseStatus}");
 
             object response = null;
 
@@ -202,15 +205,17 @@ namespace Network.Requests
 
             if (request.Object is null)
             {
-                log.Error($"Received a request with a null object");
+                Log.Error($"Received a request with a null object");
                 return;
             }
 
             var type = request.Object.GetType();
 
+            Log.Debug($"Received request {request.Id} ({type.FullName})");
+
             if (!handlers.TryGetValue(type, out var handler))
             {
-                log.Error($"Received a request with no assigned handler: {type.FullName}");
+                Log.Error($"Received a request with no assigned handler: {type.FullName}");
                 return;
             }
 
@@ -224,7 +229,7 @@ namespace Network.Requests
 
                     if (responseObject is null || responseObject is not IMessage)
                     {
-                        log.Info($"Request Handler returned a null or not an IMessage, sending failed response.");
+                        Log.Info($"Request Handler returned a null or not an IMessage, sending failed response.");
 
                         Transport.Send(RES_BYTE, bw =>
                         {
@@ -237,7 +242,7 @@ namespace Network.Requests
                     }
                     else
                     {
-                        log.Info($"Request Handler returned a valid value, sending Ok response.");
+                        Log.Info($"Request Handler returned a valid value, sending Ok response.");
 
                         Transport.Send(RES_BYTE, bw =>
                         {
@@ -252,7 +257,7 @@ namespace Network.Requests
                 }
                 catch (Exception ex)
                 {
-                    log.Error($"Failed to invoke request handler '{handlerType.FullName}' ({handler.Method.Name}):\n{ex}");
+                    Log.Error($"Failed to invoke request handler '{handlerType.FullName}' ({handler.Method.Name}):\n{ex}");
                 }
             }
             else
@@ -263,7 +268,7 @@ namespace Network.Requests
                 }
                 catch (Exception ex)
                 {
-                    log.Error($"Failed to invoke request handler '{handlerType.FullName}' ({handler.Method.Name}):\n{ex}");
+                    Log.Error($"Failed to invoke request handler '{handlerType.FullName}' ({handler.Method.Name}):\n{ex}");
                 }
             }
         }
@@ -274,15 +279,16 @@ namespace Network.Requests
             {
                 if (request.Value.Request is null)
                 {
-                    log.Warn($"Request cache contains a null request!");
+                    Log.Warn($"Request cache contains a null request!");
                     continue;
                 }
 
                 if (request.Value.Timeout > 0 && (DateTime.Now - request.Value.Requested).Seconds >= request.Value.Timeout)
                 {
-                    responses.Add(new Response(this, request.Value.Request, request.Value.Requested, DateTime.MinValue, ResponseStatus.TimedOut, null));
+                    lock (responseLock)
+                        responses.Add(new Response(this, request.Value.Request, request.Value.Requested, DateTime.MinValue, ResponseStatus.TimedOut, null));
 
-                    log.Warn($"Request '{request.Value.Request.Id}' has timed out!");
+                    Log.Warn($"Request '{request.Value.Request.Id}' has timed out!");
                 }
             }
 
@@ -292,7 +298,7 @@ namespace Network.Requests
                 {
                     if (response.Request is null)
                     {
-                        log.Warn($"Found a response with a null request!");
+                        Log.Warn($"Found a response with a null request!");
                         continue;
                     }
 
@@ -305,16 +311,16 @@ namespace Network.Requests
                             request.ResponseHandler.DynamicInvoke(new object[] { response, response.Object });
                             response.OnHandled();
 
-                            log.Debug($"Handled response '{response.Request.Id}'");
+                            Log.Debug($"Handled response '{response.Request.Id}'");
                         }
                         catch (Exception ex)
                         {
-                            log.Error($"Failed to handle request '{response.Request.Id}' response:\n{ex}");
+                            Log.Error($"Failed to handle request '{response.Request.Id}' response:\n{ex}");
                         }
                     }
                     else
                     {
-                        log.Warn($"Received a response with a missing request! ({response.Request.Id})");
+                        Log.Warn($"Received a response with a missing request! ({response.Request.Id})");
                     }
 
                     requests.Remove(response.Request.Id);

@@ -1,4 +1,5 @@
-﻿using Network.Interfaces.Synchronization;
+﻿using Common.Logging;
+using Network.Interfaces.Synchronization;
 
 using System.IO;
 using System.Reflection;
@@ -63,6 +64,8 @@ namespace Network.Synchronization
         }
 
         public void SetValueNoUpdate(TValue value)
-            => this.value = value;
+        {
+            this.value = value;
+        }
     }
 }
