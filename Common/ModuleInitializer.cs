@@ -1,11 +1,10 @@
 ﻿using Common.Attributes;
 using Common.Attributes.Custom;
 using Common.Logging;
-using Common.Logging.Console;
-using Common.Logging.File;
-using Common.Reflection;
+using Common.Extensions;
 
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Reflection;
@@ -19,16 +18,38 @@ namespace Common
         public static event Action OnInitialized;
         public static event Action OnUnloaded;
 
+        public static bool IsDebugBuild { get; private set; }
+        public static bool IsTraceBuild { get; private set; }
+        public static bool IsInitialized { get; private set; }
+
+        public static List<string> Args { get; } = new List<string>();
+
         public static DateTime InitializedAt { get; private set; }
         public static Assembly Assembly { get; private set; }
 
         public static void Initialize()
         {
+            if (IsInitialized)
+                return;
+
+            IsInitialized = true;
+
+#if DEBUG
+            IsDebugBuild = true;
+#elif TRACE
+            IsTraceBuild = true;
+#endif
+            Args.Clear();
+
+            try
+            {
+                Args.AddRange(Environment.GetCommandLineArgs());
+            }
+            catch { }
+
             LogOutput.Init();
 
             Assembly = Assembly.GetExecutingAssembly();
-
-            AttributeCollector.Collect();
 
             AttributeCollector.ForEach<InitAttribute>((data, attr) =>
             {
@@ -72,6 +93,8 @@ namespace Common
             cachedAppName = null;
 
             LogOutput.Common.Info($"Library unloaded!");
+
+            IsInitialized = false;
         }
 
         public static string GetAppName()

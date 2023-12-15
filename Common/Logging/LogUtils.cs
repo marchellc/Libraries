@@ -1,5 +1,6 @@
 ﻿using Common.Logging.Console;
 using Common.Logging.File;
+
 using System;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -13,6 +14,9 @@ namespace Common.Logging
 
         [DllImport("kernel32.dll")]
         static extern IntPtr GetConsoleWindow();
+
+        public const LogLevel General = LogLevel.Information | LogLevel.Warning | LogLevel.Error | LogLevel.Fatal;
+        public const LogLevel Debug = LogLevel.Debug | LogLevel.Trace | LogLevel.Verbose;
 
         public static bool IsConsoleAvailable
         {
@@ -53,10 +57,38 @@ namespace Common.Logging
 
         public static LogOutput Setup(this LogOutput output, bool includeFile = true)
         {
-            output.AddConsoleIfPresent();
+            var loggers = LogOutput.Common.GetLoggers();
 
-            if (includeFile)
-                output.AddFileFromOutput(LogOutput.Common);
+            for (int i = 0; i < loggers.Length; i++)
+            {
+                if (loggers[i] is FileLogger)
+                {
+                    if (includeFile)
+                        output.AddLogger(loggers[i]);
+                    else
+                        continue;
+                }
+
+                output.AddLogger(loggers[i]);
+            }
+
+            return output;
+        }
+
+        public static LogOutput Enable(this LogOutput output, LogLevel level)
+        {
+            if ((output.Enabled & level) != 0)
+                return output;
+
+            output.Enabled |= level;
+
+            return output;
+        }
+
+        public static LogOutput Disable(this LogOutput output, LogLevel level)
+        {
+            if ((output.Enabled & level) != 0)
+                output.Enabled &= ~level;
 
             return output;
         }
@@ -131,6 +163,35 @@ namespace Common.Logging
                 chars[i + 1] = new LogCharacter(tag[i], color);
 
             return chars;
+        }
+
+        public static string GetString(this LogCharacter[] chars)
+        {
+            var str = "";
+
+            for (int i = 0; i < chars.Length; i++)
+                str += $"{chars[i].Character}";
+
+            return str;
+        }
+
+        public static string GetString(this LogMessage message, bool includeTime = true, bool includeLevel = true, bool includeSource = true)
+        {
+            var str = "";
+
+            if (includeTime && message.Time != null && message.Time.Length > 0)
+                str += message.Time.GetString() + " ";
+
+            if (includeLevel && message.Tag != null && message.Tag.Length > 0)
+                str += message.Tag.GetString() + " ";
+
+            if (includeSource && message.Source != null && message.Source.Length > 0)
+                str += message.Source.GetString() + " ";
+
+            if (message.Message != null && message.Message.Length > 0)
+                str += message.Message.GetString() + " ";
+
+            return str;
         }
 
         public static string NameOfLevel(LogLevel level)
@@ -209,16 +270,16 @@ namespace Common.Logging
                     return ConsoleColor.DarkYellow;
 
                 case LogLevel.Information:
-                    return ConsoleColor.DarkBlue;
+                    return ConsoleColor.DarkGreen;
 
                 case LogLevel.Verbose:
                     return ConsoleColor.Cyan;
 
                 case LogLevel.Debug:
-                    return ConsoleColor.Blue;
+                    return ConsoleColor.DarkBlue;
 
                 case LogLevel.Trace:
-                    return ConsoleColor.Magenta;
+                    return ConsoleColor.DarkMagenta;
 
                 default:
                     return ConsoleColor.Magenta;

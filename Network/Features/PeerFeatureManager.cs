@@ -21,7 +21,7 @@ namespace Network.Features
             if (features is null)
                 return;
 
-            foreach (var feature in features)
+            foreach (var feature in features.Reverse())
                 feature.Value?.Stop();
 
             features.Clear();

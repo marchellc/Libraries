@@ -1,8 +1,6 @@
-﻿using Common.Pooling.Pools;
-
-using System;
+﻿using System;
 using System.Collections.Generic;
-using System.Text;
+using System.Threading;
 
 namespace Common.Logging.File
 {
@@ -10,8 +8,7 @@ namespace Common.Logging.File
     {
         private string path;
         private object gLock;
-
-        private int maxSize = 12;
+        private Timer timer;
 
         private LogMessage lastMsg;
 
@@ -21,15 +18,21 @@ namespace Common.Logging.File
 
         public DateTime Started { get; }
 
-        public FileLogger(string path, int maxSize = 12)
+        public FileLogger(string path)
         {
             if (string.IsNullOrWhiteSpace(path))
                 throw new ArgumentNullException(nameof(path));
 
             this.path = path;
-            this.maxSize = maxSize;
             this.gLock = new object();
             this.toAdd = new List<LogMessage>();
+            this.timer = new Timer(_ => WriteLogs(), null, 10, 500);
+        }
+
+        ~FileLogger()
+        {
+            timer.Dispose();
+            timer = null;
         }
 
         public void Emit(LogMessage message)
@@ -38,9 +41,6 @@ namespace Common.Logging.File
 
             lock (gLock)
                 toAdd.Add(message);
-
-            if (toAdd.Count >= maxSize)
-                WriteLogs();
         }
 
         private void WriteLogs()
@@ -51,7 +51,7 @@ namespace Common.Logging.File
                 {
                     foreach (var msg in toAdd)
                     {
-                        var str = MakeString(msg);
+                        var str = msg.GetString();
 
                         if (string.IsNullOrWhiteSpace(str))
                             continue;
@@ -60,34 +60,9 @@ namespace Common.Logging.File
                     }
                 }
                 catch { }
+
+                toAdd.Clear();
             }
-        }
-
-        private static string MakeString(LogMessage message)
-        {
-            var str = StringBuilderPool.Shared.Next();
-
-            if (message.Time != null && message.Time.Length > 0)
-                WriteArray(message.Time, str);
-
-            if (message.Tag != null && message.Tag.Length > 0)
-                WriteArray(message.Tag, str);
-
-            if (message.Source != null && message.Source.Length > 0)
-                WriteArray(message.Source, str);
-
-            if (message.Message != null && message.Message.Length > 0)
-                WriteArray(message.Message, str);
-
-            return StringBuilderPool.Shared.StringReturn(str);
-        }
-
-        private static void WriteArray(LogCharacter[] array, StringBuilder str)
-        {
-            for (int i = 0; i < array.Length; i++)
-                str.Append(array[i].Character);
-
-            str.Append(' ');
         }
     }
 }

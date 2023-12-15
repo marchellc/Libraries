@@ -1,11 +1,9 @@
 ﻿using Common.Extensions;
-using Common.Reflection;
 
 using System;
 using System.IO;
 
 using Network.Interfaces.Transporting;
-using Common.Logging;
 
 namespace Network.Extensions
 {
@@ -46,5 +44,8 @@ namespace Network.Extensions
 
         public static object ReadObject(this ITransport transport, BinaryReader reader)
             => reader.ReadObject(transport);
+
+        public static T ReadObject<T>(this ITransport transport, BinaryReader reader)
+            => reader.ReadObject<T>(transport);
     }
 }

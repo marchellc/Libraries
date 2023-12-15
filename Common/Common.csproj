@@ -16,6 +16,7 @@
     <LangVersion>preview</LangVersion>
     <NuGetPackageImportStamp>
     </NuGetPackageImportStamp>
+    <TargetFrameworkProfile />
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -33,10 +34,35 @@
     <DefineConstants>TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="0Harmony, Version=2.10.2.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\packages\HarmonyX.2.10.2\lib\net45\0Harmony.dll</HintPath>
+    </Reference>
+    <Reference Include="Fasterflect, Version=3.0.0.0, Culture=neutral, PublicKeyToken=38d18473284c1ca7, processorArchitecture=MSIL">
+      <HintPath>..\packages\fasterflect.3.0.0\lib\netstandard20\netstandard20\Fasterflect.dll</HintPath>
+    </Reference>
     <Reference Include="ModuleInit, Version=2.1.1.0, Culture=neutral, PublicKeyToken=409b3227471b0f0d, processorArchitecture=MSIL">
       <HintPath>..\packages\ModuleInit.Fody.2.1.1\lib\net452\ModuleInit.dll</HintPath>
+    </Reference>
+    <Reference Include="Mono.Cecil, Version=0.11.4.0, Culture=neutral, PublicKeyToken=50cebf1cceb9d05e, processorArchitecture=MSIL">
+      <HintPath>..\packages\Mono.Cecil.0.11.4\lib\net40\Mono.Cecil.dll</HintPath>
+    </Reference>
+    <Reference Include="Mono.Cecil.Mdb, Version=0.11.4.0, Culture=neutral, PublicKeyToken=50cebf1cceb9d05e, processorArchitecture=MSIL">
+      <HintPath>..\packages\Mono.Cecil.0.11.4\lib\net40\Mono.Cecil.Mdb.dll</HintPath>
+    </Reference>
+    <Reference Include="Mono.Cecil.Pdb, Version=0.11.4.0, Culture=neutral, PublicKeyToken=50cebf1cceb9d05e, processorArchitecture=MSIL">
+      <HintPath>..\packages\Mono.Cecil.0.11.4\lib\net40\Mono.Cecil.Pdb.dll</HintPath>
+    </Reference>
+    <Reference Include="Mono.Cecil.Rocks, Version=0.11.4.0, Culture=neutral, PublicKeyToken=50cebf1cceb9d05e, processorArchitecture=MSIL">
+      <HintPath>..\packages\Mono.Cecil.0.11.4\lib\net40\Mono.Cecil.Rocks.dll</HintPath>
+    </Reference>
+    <Reference Include="MonoMod.RuntimeDetour, Version=22.3.23.4, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\packages\MonoMod.RuntimeDetour.22.3.23.4\lib\net452\MonoMod.RuntimeDetour.dll</HintPath>
+    </Reference>
+    <Reference Include="MonoMod.Utils, Version=22.3.23.4, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\packages\MonoMod.Utils.22.3.23.4\lib\net452\MonoMod.Utils.dll</HintPath>
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
@@ -56,11 +82,34 @@
     <Compile Include="Attributes\AttributeResolver.cs" />
     <Compile Include="Attributes\Custom\InitAttribute.cs" />
     <Compile Include="Attributes\Custom\UnloadAttribute.cs" />
+    <Compile Include="Extensions\ArrayExtensions.cs" />
+    <Compile Include="Extensions\AssemblyExtensions.cs" />
+    <Compile Include="Extensions\CollectionExtensions.cs" />
+    <Compile Include="Extensions\DelegateExtensions.cs" />
+    <Compile Include="Extensions\EnumExtensions.cs" />
+    <Compile Include="Extensions\EventExtensions.cs" />
+    <Compile Include="Extensions\FieldExtensions.cs" />
+    <Compile Include="Extensions\MemberExtensions.cs" />
+    <Compile Include="Extensions\MethodExtensions.cs" />
+    <Compile Include="Extensions\PropertyExtensions.cs" />
+    <Compile Include="Extensions\ResultExtensions.cs" />
     <Compile Include="Extensions\SegmentExtensions.cs" />
-    <Compile Include="Generation\ByteId.cs" />
+    <Compile Include="Extensions\StringExtensions.cs" />
+    <Compile Include="Extensions\TaskExtensions.cs" />
+    <Compile Include="Extensions\TypeExtensions.cs" />
+    <Compile Include="Utilities\Chance.cs" />
+    <Compile Include="Utilities\Generation\BasicGenerator.cs" />
+    <Compile Include="Utilities\Generation\ByteId.cs" />
     <Compile Include="Extensions\ReaderExtensions.cs" />
     <Compile Include="Extensions\WriterExtensions.cs" />
+    <Compile Include="Instances\InstanceAttribute.cs" />
+    <Compile Include="Instances\InstanceDescriptor.cs" />
+    <Compile Include="Instances\InstanceManager.cs" />
+    <Compile Include="Instances\InstanceUtils.cs" />
+    <Compile Include="Instances\InstantiateAttribute.cs" />
     <Compile Include="IO\Collections\LockedDictionary.cs" />
+    <Compile Include="IO\Directory.cs" />
+    <Compile Include="IO\File.cs" />
     <Compile Include="ModuleInitializer.cs" />
     <Compile Include="IO\Collections\LockedList.cs" />
     <Compile Include="Logging\Console\ConsoleLogger.cs" />
@@ -92,14 +141,27 @@
     <Compile Include="Pooling\Pools\PoolablePool.cs" />
     <Compile Include="Pooling\Pools\StringBuilderPool.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="Reflection\CallUtils.cs" />
+    <Compile Include="Results\Error.cs" />
+    <Compile Include="Results\IResult.cs" />
+    <Compile Include="Results\Success.cs" />
+    <Compile Include="Utilities\Assert.cs" />
     <Compile Include="Utilities\Disposable.cs" />
     <Compile Include="Utilities\Exceptions\ExceptionManager.cs" />
     <Compile Include="Utilities\Exceptions\ExceptionSettings.cs" />
     <Compile Include="Utilities\Exceptions\ExceptionUtils.cs" />
+    <Compile Include="Utilities\Generator.cs" />
+    <Compile Include="Utilities\IndexUtils.cs" />
+    <Compile Include="Utilities\RegexUtils.cs" />
     <Compile Include="Utilities\TypeInstanceComparer.cs" />
     <Compile Include="Utilities\TypeInstanceValidator.cs" />
     <Compile Include="Utilities\WrappedAction.cs" />
+    <Compile Include="Values\IGetValue.cs" />
+    <Compile Include="Values\ISetValue.cs" />
+    <Compile Include="Values\IValue.cs" />
+    <Compile Include="Values\IWrapper.cs" />
+    <Compile Include="Values\RecordedValue.cs" />
+    <Compile Include="Values\ReferenceValue.cs" />
+    <Compile Include="Values\WeakValue.cs" />
   </ItemGroup>
   <ItemGroup>
     <Folder Include="IO\Data\" />

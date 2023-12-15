@@ -1,8 +1,6 @@
 ﻿using Common.IO.Collections;
 using Common.Logging;
-using Common.Logging.Console;
-using Common.Logging.File;
-using Common.Reflection;
+using Common.Extensions;
 using Common.Utilities;
 
 using System;
@@ -14,7 +12,7 @@ namespace Common.Attributes
 {
     public static class AttributeCollector
     {
-        private static LogOutput log = new LogOutput("Attribute Manager").AddConsoleIfPresent().AddFileFromOutput(LogOutput.Common);
+        private static LogOutput log = new LogOutput("Attribute Manager").Setup();
         private static LockedList<AttributeCache> cachedAttributes = new LockedList<AttributeCache>();
         private static BindingFlags flags = BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static | BindingFlags.NonPublic;
 
@@ -24,6 +22,9 @@ namespace Common.Attributes
         static AttributeCollector()
         {
             AppDomain.CurrentDomain.AssemblyLoad += OnAssembly;
+
+            foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+                Collect(assembly);
         }
 
         public static IEnumerable<AttributeCache> Get<T>() where T : Attribute

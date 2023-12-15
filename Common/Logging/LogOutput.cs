@@ -1,5 +1,4 @@
-﻿using Common.Attributes.Custom;
-using Common.Logging.Console;
+﻿using Common.Logging.Console;
 using Common.Logging.File;
 using Common.Utilities;
 
@@ -34,8 +33,13 @@ namespace Common.Logging
             }
         }
 
+        public LogLevel Enabled { get; set; } = LogLevel.Information | LogLevel.Warning | LogLevel.Error | LogLevel.Fatal;
+
         public bool HasLogger<TLogger>() where TLogger : ILogger
             => loggers.Any(t => t is TLogger);
+
+        public ILogger[] GetLoggers()
+            => loggers.ToArray();
 
         public TLogger GetLogger<TLogger>() where TLogger : ILogger
         {
@@ -104,22 +108,25 @@ namespace Common.Logging
         {
             message.Output = this;
 
-            foreach (var logger in loggers)
+            if ((message.Level & Enabled) != 0)
             {
-                if (logger is null)
-                    continue;
+                foreach (var logger in loggers)
+                {
+                    if (logger is null)
+                        continue;
 
-                try
-                {
-                    logger.Emit(message);
+                    try
+                    {
+                        logger.Emit(message);
+                    }
+                    catch (Exception ex)
+                    {
+                        Raw($"Failed to display message on logger '{logger.GetType().FullName}':\n{ex}", ConsoleColor.Red);
+                    }
                 }
-                catch (Exception ex)
-                {
-                    Raw($"Failed to display message on logger '{logger.GetType().FullName}':\n{ex}", ConsoleColor.Red);
-                }
+
+                LogEvents.Invoke(message);
             }
-
-            LogEvents.Invoke(message);
         }
 
         public override void OnDispose()
@@ -143,7 +150,7 @@ namespace Common.Logging
 
         internal static void Init()
         {
-            Common = new LogOutput("Library");
+            Common = new LogOutput("Common Library");
             Common.AddConsoleIfPresent();
             Common.AddFileWithPrefix("General Log");
         }

@@ -2,7 +2,7 @@
 using Common.Logging;
 using Common.Logging.Console;
 using Common.Logging.File;
-using Common.Reflection;
+using Common.Extensions;
 
 using System;
 using System.Diagnostics;

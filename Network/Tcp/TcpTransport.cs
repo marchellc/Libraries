@@ -1,7 +1,6 @@
 ﻿using Common.Extensions;
 using Common.IO.Collections;
 using Common.Logging;
-using Common.Reflection;
 using Common.Utilities;
 
 using Network.Attributes;
@@ -167,62 +166,76 @@ namespace Network.Tcp
 
         public void Receive(byte[] data)
         {
-            if (recv >= long.MaxValue || (recv + data.Length) >= long.MaxValue)
-                recv = 0;
-
-            recv += data.Length;
-
-            using (var ms = new MemoryStream(data))
-            using (var br = new BinaryReader(ms))
+            try
             {
-                var messageId = br.ReadByte();
+                if (recv >= long.MaxValue || (recv + data.Length) >= long.MaxValue)
+                    recv = 0;
 
-                if (msgHandlers.TryGetValue(messageId, out var list))
+                recv += data.Length;
+
+                using (var ms = new MemoryStream(data))
+                using (var br = new BinaryReader(ms))
                 {
-                    for (int i = 0; i < list.Count; i++)
+                    var messageId = br.ReadByte();
+
+                    if (msgHandlers.TryGetValue(messageId, out var list))
                     {
-                        list[i].Call(br);
+                        for (int i = 0; i < list.Count; i++)
+                            list[i].Call(br, null, log.Error);
+
+                        return;
                     }
 
-                    return;
+                    log.Debug($"Received a message of ID {messageId}");
+
+                    var objects = br.ReadArray(false, () => br.ReadObject(this));
+
+                    for (int i = 0; i < objects.Length; i++)
+                    {
+                        if (objects[i] is null)
+                        {
+                            log.Warn($"Received a null object at index {i}, discarding");
+                            continue;
+                        }
+
+                        var type = objects[i].GetType();
+
+                        if (typeHandlers.TryGetValue(type, out var typeList))
+                        {
+                            for (int x = 0; x < list.Count; x++)
+                                typeList[x].Proxy.Method.Call(typeList[x].Proxy.Target, log.Error, objects[i]);
+                        }
+                        else
+                        {
+                            log.Warn($"Received a message with no handlers: {type.FullName}");
+                        }
+                    }
                 }
-
-                var objects = br.ReadArray(false, () => br.ReadObject(this));
-
-                for (int i = 0; i < objects.Length; i++)
-                {
-                    if (objects[i] is null)
-                    {
-                        log.Warn($"Received a null object at index {i}, discarding");
-                        continue;
-                    }
-
-                    var type = objects[i].GetType();
-
-                    if (typeHandlers.TryGetValue(type, out var typeList))
-                    {
-                        for (int x = 0; x < list.Count; x++)
-                            typeList[x].Proxy.Method.Call(typeList[x].Proxy.Target, null, objects[i]);
-                    }
-                    else
-                    {
-                        log.Warn($"Received a message with no handlers: {type.FullName}");
-                    }
-                }
+            }
+            catch (Exception ex)
+            {
+                log.Error($"Failed to handle incoming message!\n{ex}");
             }
         }
 
         public void Send(byte[] data)
         {
-            if (sent >= long.MaxValue || (sent + data.Length) >= long.MaxValue)
-                sent = 0;
+            try
+            {
+                if (sent >= long.MaxValue || (sent + data.Length) >= long.MaxValue)
+                    sent = 0;
 
-            sent += data.Length;
+                sent += data.Length;
 
-            if (controller is IServer server)
-                server.Send(peer.Id, data);
-            else if (controller is IClient client)
-                client.Send(data);
+                if (controller is IServer server)
+                    server.Send(peer.Id, data);
+                else if (controller is IClient client)
+                    client.Send(data);
+            }
+            catch (Exception ex)
+            {
+                log.Error($"Failed to send message!\n{ex}");
+            }
         }
 
         public void Synchronize()

@@ -45,5 +45,18 @@ namespace Network.Extensions
                 return value;
             }
         }
+
+        public static T ReadObject<T>(this BinaryReader reader, ITransport transport)
+        {
+            var obj = reader.ReadObject(transport);
+
+            if (obj is null)
+                return default;
+
+            if (obj is not T t)
+                throw new InvalidDataException($"Bad data order");
+
+            return t;
+        }
     }
 }

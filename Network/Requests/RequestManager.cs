@@ -8,7 +8,6 @@ using System.IO;
 using System.Threading;
 
 using Common.IO.Collections;
-using Common.Reflection;
 using Common.Extensions;
 
 using System.Collections.Generic;
@@ -43,7 +42,7 @@ namespace Network.Requests
             this.responses = new HashSet<IResponse>(byte.MaxValue);
             this.handlers = new LockedDictionary<Type, Delegate>();
             this.received = new LockedList<byte>(byte.MaxValue);
-            this.timer = new Timer(UpdateResponses, null, 0, 800);
+            this.timer = new Timer(UpdateResponses, null, 0, 100);
             this.requestId = 0;
 
             Transport.CreateHandler(REQ_BYTE, HandleRequest);
@@ -77,11 +76,13 @@ namespace Network.Requests
             where TResponse : IMessage
         {
             handlers[typeof(T)] = handler;
+            Log.Debug($"Created handler for {typeof(T).FullName} ({typeof(TResponse).FullName}): {handler.Method.DeclaringType.FullName}.{handler.Method.Name}");
         }
 
         public void CreateHandler<T>(Action<IRequest, T> handler) where T : IMessage
         {
             handlers[typeof(T)] = handler;
+            Log.Debug($"Created handler for {typeof(T).FullName} {handler.Method.DeclaringType.FullName}.{handler.Method.Name}");
         }
 
         public void RemoveHandler<T>(Action<IRequest, T> handler) where T : IMessage
@@ -101,31 +102,42 @@ namespace Network.Requests
             where TResponse : IMessage
         {
             if (request is null)
-                throw new ArgumentNullException(nameof(request));
-
-            var requestId = GetNextId();
-            var requestInfo = new Request(this, requestId, DateTime.Now, DateTime.MinValue, request);
-
-            requests[requestId] = new RequestCache
             {
-                Request = requestInfo,
-                Requested = requestInfo.Sent,
-                Timeout = timeout,
-                ResponseHandler = responseHandler
-            };
+                Log.Error($"Attempted to send a null request!");
+                return null;
+            }
 
-            OnRequested.Call(requestInfo);
-
-            Transport.Send(REQ_BYTE, bw =>
+            try
             {
-                bw.Write(requestInfo.Id);
-                bw.WriteDate(requestInfo.Sent);
-                bw.WriteObject(requestInfo.Object, Transport);
-            });
+                var requestId = GetNextId();
+                var requestInfo = new Request(this, requestId, DateTime.Now, DateTime.MinValue, request);
 
-            Log.Debug($"Sent request of ID {requestId} ({typeof(T).FullName})");
+                requests[requestId] = new RequestCache
+                {
+                    Request = requestInfo,
+                    Requested = requestInfo.Sent,
+                    Timeout = timeout,
+                    ResponseHandler = responseHandler
+                };
 
-            return requestInfo;
+                OnRequested.Call(requestInfo);
+
+                Transport.Send(REQ_BYTE, bw =>
+                {
+                    bw.Write(requestInfo.Id);
+                    bw.WriteDate(requestInfo.Sent);
+                    bw.WriteObject(requestInfo.Object, Transport);
+                });
+
+                Log.Debug($"Sent request of ID {requestId} ({typeof(T).FullName})");
+
+                return requestInfo;
+            }
+            catch (Exception ex)
+            {
+                Log.Error($"Failed to send request!\n{ex}");
+                return null;
+            }
         }
 
         public IResponse Respond<T>(IRequest request, T response, ResponseStatus status) where T : IMessage
@@ -145,8 +157,6 @@ namespace Network.Requests
             OnResponded.Call(request, responseInfo);
 
             request.OnResponded(responseInfo);
-
-            Log.Debug($"Sent a response to request of ID '{request.Id}' ({typeof(T).FullName})");
 
             return responseInfo;
         }
@@ -206,6 +216,8 @@ namespace Network.Requests
         private void HandleRequest(BinaryReader br)
         {
             var reqId = br.ReadByte();
+
+            Log.Debug($"Received a request of ID {reqId}");
 
             if (received.Contains(reqId))
                 return;

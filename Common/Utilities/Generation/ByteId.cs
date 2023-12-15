@@ -1,10 +1,10 @@
-﻿using Common.Reflection;
+﻿using Common.Extensions;
 
 using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace Common.Generation
+namespace Common.Utilities.Generation
 {
     public class ByteId
     {
@@ -28,9 +28,7 @@ namespace Common.Generation
         public byte Take()
         {
             if (IsEmpty)
-            {
                 throw new InvalidOperationException($"The ID list is empty.");
-            }
 
             var id = generated.Last();
 

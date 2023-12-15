@@ -1,9 +1,13 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
+using System.Text;
+using System.Threading.Tasks;
 
-namespace Common.Reflection
+namespace Common.Extensions
 {
-    public static class CallUtils
+    public static class DelegateExtensions
     {
         public static void Call(this Action action, Action callback = null, Action<Exception> errorCallback = null)
         {
@@ -102,18 +106,22 @@ namespace Common.Reflection
 
             return default;
         }
-        
-        public static object Call(this MethodBase method, object instance, Action<Exception> errorCallback, params object[] args)
+
+        public static TResult Call<TItem1, TItem2, TResult>(this Func<TItem1, TItem2, TResult> func, TItem1 item1, TItem2 item2, Action<Exception> errorCallback = null)
         {
+            if (func is null)
+                return default;
+
             try
             {
-                return method.Invoke(instance, args);
+                return func(item1, item2);
             }
             catch (Exception ex)
             {
                 errorCallback.Call(ex);
-                return null;
             }
+
+            return default;
         }
     }
 }
