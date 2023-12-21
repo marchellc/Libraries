@@ -39,6 +39,7 @@ namespace Common
 #elif TRACE
             IsTraceBuild = true;
 #endif
+
             Args.Clear();
 
             try
@@ -47,9 +48,9 @@ namespace Common
             }
             catch { }
 
-            LogOutput.Init();
-
             Assembly = Assembly.GetExecutingAssembly();
+
+            LogOutput.Init();
 
             AttributeCollector.ForEach<InitAttribute>((data, attr) =>
             {

@@ -9,7 +9,7 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Telepathy", "..\Telepathy\T
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Test", "Test\Test.csproj", "{13186E55-2C19-4697-95CF-EA3585A8A8F6}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Network", "Network\Network.csproj", "{073DC8C0-1C4C-4C71-BA83-4A5EF472D63B}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Networking", "Networking\Networking.csproj", "{B16FA462-A4E7-43B5-AAC1-B980343933C1}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -29,10 +29,10 @@ Global
 		{13186E55-2C19-4697-95CF-EA3585A8A8F6}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{13186E55-2C19-4697-95CF-EA3585A8A8F6}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{13186E55-2C19-4697-95CF-EA3585A8A8F6}.Release|Any CPU.Build.0 = Release|Any CPU
-		{073DC8C0-1C4C-4C71-BA83-4A5EF472D63B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{073DC8C0-1C4C-4C71-BA83-4A5EF472D63B}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{073DC8C0-1C4C-4C71-BA83-4A5EF472D63B}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{073DC8C0-1C4C-4C71-BA83-4A5EF472D63B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B16FA462-A4E7-43B5-AAC1-B980343933C1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B16FA462-A4E7-43B5-AAC1-B980343933C1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B16FA462-A4E7-43B5-AAC1-B980343933C1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B16FA462-A4E7-43B5-AAC1-B980343933C1}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
