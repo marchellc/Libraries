@@ -1,28 +1,39 @@
-﻿using Networking.Data;
+﻿using Common.Extensions;
+
+using Networking.Data;
 
 namespace Networking.Objects
 {
     public struct NetworkVariableSyncMessage : IMessage
     {
-        public int variableId;
-        public byte[] data;
+        public int objectId;
 
-        public NetworkVariableSyncMessage(int varId, byte[] data)
+        public ushort hash;
+
+        public IMessage msg;
+
+        public NetworkVariableSyncMessage(int objectId, ushort hash, IMessage msg)
         {
-            this.variableId = varId;
-            this.data = data;
+            this.objectId = objectId;
+            this.hash = hash;
+            this.msg = msg;
         }
 
         public void Deserialize(Reader reader)
         {
-            this.variableId = reader.ReadInt();
-            this.data = reader.ReadBytes();
+            objectId = reader.ReadInt();
+            hash = reader.ReadUShort();
+
+            msg = reader.ReadType().Construct() as IMessage;
+            msg.Deserialize(reader);
         }
 
         public void Serialize(Writer writer)
         {
-            writer.WriteInt(variableId);
-            writer.WriteBytes(data);
+            writer.WriteInt(objectId);
+            writer.WriteUShort(hash);
+
+            msg.Serialize(writer);
         }
     }
 }

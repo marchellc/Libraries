@@ -1,15 +1,12 @@
 ﻿using Common.Extensions;
 using Common.Pooling.Pools;
 
-using Networking.Interfaces;
 using Networking.Utilities;
 using Networking.Pooling;
 
 using System;
 using System.Text;
 using System.Collections.Generic;
-
-using Utf8Json;
 
 namespace Networking.Data
 {
@@ -29,7 +26,6 @@ namespace Networking.Data
 
         private Encoding encoding;
         private List<byte> buffer;
-        private ITypeLibrary typeLib;
         private byte[] data;
         private int offset;
 
@@ -46,19 +42,16 @@ namespace Networking.Data
 
         public Encoding Encoding { get => encoding; set => encoding = value; }
 
-        public ITypeLibrary TypeLibrary { get => typeLib; set => typeLib = value; }
-
         public event Action<int, int> OnMoved;
 
         public event Action OnPooled;
         public event Action OnUnpooled;
 
-        public Reader(ITypeLibrary typeLib = null) : this(Encoding.Default, typeLib) { }
+        public Reader() : this(Encoding.Default) { }
 
-        public Reader(Encoding encoding, ITypeLibrary typeLib = null) 
+        public Reader(Encoding encoding) 
         { 
-            this.encoding = encoding; 
-            this.typeLib = typeLib;
+            this.encoding = encoding;
         }
 
         internal void ToPool()
@@ -276,161 +269,204 @@ namespace Networking.Data
 
         public Type ReadType()
         {
-            var typeValue = ReadByte();
+            var typeName = ReadCleanString();
+            var typeValue = Type.GetType(typeName);
 
-            if (typeValue == 0)
-            {
-                var typeId = ReadShort();
-                var type = typeLib.GetType(typeId);
-
-                if (type is null)
-                    throw new TypeLoadException($"Failed to find type of ID '{typeId}'");
-
-                return type;
-            }
-            else if (typeValue == 1)
-            {
-                var typeName = ReadString();
-
-                if (typeName.isNullOrEmpty)
-                    throw new InvalidOperationException($"Cannot read type from an empty string");
-
-                var typeNameValue = typeName.GetValue();
-                var type = Type.GetType(typeNameValue);
-
-                if (type is null)
-                    throw new TypeLoadException($"Failed to find type with name '{typeNameValue}'");
-
-                return type;
-            }
-            else
-            {
-                throw new InvalidOperationException($"Unsupported type: {typeValue}");
-            }
+            return typeValue;
         }
 
-        public List<T> ReadList<T>(Func<T> generator)
+        public object ReadAnonymous()
         {
-            var list = new List<T>();
-            var size = ReadInt();
+            var isNull = ReadBool();
 
-            if (size <= 0)
-                return list;
-
-            for (int i = 0; i < size; i++)
-                list.Add(generator.Call());
-
-            return list;
-        }
-
-        public object ReadObject()
-        {
-            var objectValueType = ReadByte();
-
-            if (objectValueType == 0)
+            if (isNull)
                 return null;
 
-            var objectTypeInfo = ReadType();
-
-            if (TypeLoader.IsDeserializable(objectTypeInfo))
+            var type = ReadType();
+            var isMessage = ReadBool();
+            
+            if (isMessage)
             {
-                var objectValue = TypeLoader.Instance(objectTypeInfo);
+                var message = type.Construct() as IMessage;
 
-                if (objectValue != null && objectValue is IDeserialize deserialize)
-                    deserialize.Deserialize(this);
+                message.Deserialize(this);
 
-                return objectValue;
+                return message;
             }
-            else
-            {
-                var reader = TypeLoader.GetReader(objectTypeInfo);
 
-                if (reader is null)
-                    throw new InvalidOperationException($"Cannot read type '{objectTypeInfo.FullName}'");
+            var reader = TypeLoader.GetReader(type);
 
-                return reader.Call(this);
-            }
+            return reader(this);
         }
 
-        public object[] ReadObjects()
+        public object[] ReadAnonymousArray()
         {
             var size = ReadInt();
             var array = new object[size];
 
-            if (size <= 0)
-                return array;
-
             for (int i = 0; i < size; i++)
-                array[i] = ReadObject();
+                array[i] = ReadAnonymous();
 
             return array;
         }
 
-        public TObject ReadObject<TObject>()
+        public T Read<T>()
         {
-            var obj = ReadObject();
+            var reader = TypeLoader.GetReader(typeof(T));
+            var isNull = ReadByte();
 
-            if (obj is null)
-                return default;
+            switch (isNull)
+            {
+                case 0:
+                    {
+                        var item = typeof(T).Construct();
 
-            if (obj is not TObject objValue)
-                throw new InvalidCastException($"Cannot cast '{obj.GetType().FullName}' to '{typeof(TObject).FullName}'");
+                        if (item is null || item is not IDeserialize deserialize)
+                            throw new Exception($"Invalid data signature");
 
-            return objValue;
+                        deserialize.Deserialize(this);
+
+                        if (deserialize is not T tDeserialize)
+                            throw new InvalidCastException($"Cannot cast {deserialize.GetType().FullName} to {typeof(T).FullName}");
+
+                        return tDeserialize;
+                    }
+
+                case 1:
+                    return default;
+
+                case 2:
+                    {
+                        var item = reader(this);
+
+                        if (item is null || item is not T tItem)
+                            throw new Exception($"Invalid data");
+
+                        return tItem;
+                    }
+
+                default:
+                    throw new Exception($"Unknown data");
+            }
         }
 
-        public TObject[] ReadObjects<TObject>()
+        public List<T> ReadList<T>()
+        {
+            var reader = TypeLoader.GetReader(typeof(T));
+            var isNull = ReadByte();
+
+            switch (isNull)
+            {
+                case 0:
+                    return null;
+
+                case 1:
+                    {
+                        var size = ReadInt();
+
+                        if (size <= 0)
+                            return new List<T>();
+
+                        var list = new List<T>();
+
+                        for (int i = 0; i < size; i++)
+                        {
+                            var item = reader(this);
+
+                            if (item is null || item is not T tItem)
+                                continue;
+
+                            list.Add(tItem);
+                        }
+
+                        return list;
+                    }
+
+                default:
+                    throw new Exception($"Invalid data");
+            }
+        }
+
+        public Dictionary<TKey, TValue> ReadDictionary<TKey, TValue>()
+        {
+            var keyReader = TypeLoader.GetReader(typeof(TKey));
+            var valueReader = TypeLoader.GetReader(typeof(TValue));
+            var isNull = ReadByte();
+
+            switch (isNull)
+            {
+                case 0:
+                    return null;
+
+                case 1:
+                    {
+                        var size = ReadInt();
+
+                        if (size <= 0)
+                            return new Dictionary<TKey, TValue>();
+
+                        var dict = new Dictionary<TKey, TValue>(size);
+
+                        for (int i = 0; i < size; i++)
+                        {
+                            var keyItem = keyReader(this);
+                            var valueItem = valueReader(this);
+
+                            if (keyItem is null || keyItem is not TKey tKeyItem)
+                                continue;
+
+                            if (valueItem is null || valueItem is not TValue tValueItem)
+                                continue;
+
+                            dict[tKeyItem] = tValueItem;
+                        }
+
+                        return dict;
+                    }
+
+                default:
+                    throw new Exception($"Invalid data");
+            }
+        }
+
+        public Reader ReadReader()
+        {
+            var bytes = ReadBytes();
+
+            if (pool != null)
+                return pool.Next(bytes);
+            else
+            {
+                var reader = new Reader();
+                reader.FromPool(bytes);
+                return reader;
+            }
+        }
+
+        public List<IDeserialize> ReadToEnd()
         {
             var size = ReadInt();
+            var list = new List<IDeserialize>();
 
             if (size <= 0)
-                return Array.Empty<TObject>();
+                return list;
 
-            var list = new List<TObject>();
+            list.Capacity = size;
 
             for (int i = 0; i < size; i++)
             {
-                var objValue = ReadObject();
+                var type = ReadType();
+                var message = type.Construct();
 
-                if (objValue is null || objValue is not TObject obj)
+                if (message is null || message is not IDeserialize deserialize)
                     continue;
 
-                list.Add(obj);
+                deserialize.Deserialize(this);
+
+                list.Add(deserialize);
             }
 
-            return list.ToArray();
-        }
-
-        public object ReadJson()
-        {
-            var objectValueType = ReadByte();
-
-            if (objectValueType == 0)
-                return null;
-
-            var jsonBytes = ReadBytes();
-            var jsonTypeInfo = ReadType();
-
-            var jsonObj = JsonSerializer.NonGeneric.Deserialize(jsonTypeInfo, jsonBytes);
-
-            return jsonObj;
-        }
-
-        public TObject ReadJson<TObject>()
-        {
-            var objectValueType = ReadByte();
-
-            if (objectValueType == 0)
-                return default;
-
-            var jsonBytes = ReadBytes();
-            var jsonTypeInfo = ReadType();
-            var jsonObj = JsonSerializer.NonGeneric.Deserialize(jsonTypeInfo, jsonBytes);
-
-            if (jsonObj is TObject obj)
-                return obj;
-
-            throw new InvalidCastException($"Cannot cast '{jsonTypeInfo.FullName}' to '{typeof(TObject).FullName}'");
+            return list;
         }
 
         public int Read7BitEncodedInt()
@@ -482,9 +518,6 @@ namespace Networking.Data
 
             pool.Return(this);
         }
-
-        public bool IsHeader(byte expectedHeader)
-            => (ReadByte() + expectedHeader) == byte.MaxValue;
 
         private void Move(int count)
         {

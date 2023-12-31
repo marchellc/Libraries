@@ -20,7 +20,6 @@ namespace Networking.Client
     {
         private Telepathy.Client client;
 
-        private TypeLibrary typeLib;
         private NetworkFunctions funcs;
 
         private Timer timer;
@@ -71,7 +70,7 @@ namespace Networking.Client
         public event Action OnPinged;
 
         public event Action<ArraySegment<byte>> OnData;
-        public event Action<Type, object> OnMessage;
+        public event Action<Type, IDeserialize> OnMessage;
 
         public static readonly Version version;
         public static readonly NetworkClient instance;
@@ -87,10 +86,8 @@ namespace Networking.Client
             this.log = new LogOutput("Network Client");
             this.log.Setup();
 
-            this.typeLib = new TypeLibrary();
-
-            this.writers = new WriterPool(typeLib);
-            this.readers = new ReaderPool(typeLib);
+            this.writers = new WriterPool();
+            this.readers = new ReaderPool();
 
             this.writers.Initialize(20);
             this.readers.Initialize(20);
@@ -181,8 +178,6 @@ namespace Networking.Client
             else if (this.target.endPoint is null && endPoint != null)
                 this.target = new IPInfo(IPType.Remote, endPoint.Address.ToString(), endPoint.Port, endPoint.Address);
 
-            this.typeLib.Reset();
-
             this.outDataQueue.Clear();
             this.inDataQueue.Clear();
 
@@ -230,8 +225,6 @@ namespace Networking.Client
 
             this.timer?.Dispose();
             this.timer = null;
-
-            this.typeLib.Reset();
 
             this.outDataQueue.Clear();
             this.inDataQueue.Clear();
@@ -324,92 +317,84 @@ namespace Networking.Client
         private void InternalReceive(byte[] data)
         {
             var reader = readers.Next(data);
-            var channel = reader.ReadByte();
 
-            // PING MSG
-            if (channel == 0)
+            if (handshake is NetworkHandshakeResult.TimedOut)
             {
-                var sentDate = reader.ReadDate();
-                var recvDate = DateTime.Now;
-                var latency = (recvDate - sentDate).TotalMilliseconds;
+                var serverVersion = reader.ReadVersion();
+                var serverTime = reader.ReadDate();
 
-                this.latency = latency;
-
-                if (latency > maxLatency)
-                    maxLatency = latency;
-
-                if (latency < minLatency)
-                    minLatency = latency;
-
-                avgLatency = (maxLatency + minLatency) / 2;
-
-                readers.Return(reader);
-
-                Send(writer =>
-                {
-                    writer.WriteByte(0);
-                    writer.WriteDate(recvDate);
-                    writer.WriteDate(sentDate);
-                });
-
-                OnPinged.Call();
-            }
-            // AUTH MSG
-            else if (channel == 1)
-            {
-                if (!typeLib.Verify(reader)
-                    || reader.ReadVersion() != version
-                    || reader.ReadDate().Hour != DateTime.Now.Hour)
+                if (serverVersion != version
+                    || serverTime.Hour != DateTime.Now.ToLocalTime().Hour)
                 {
                     Send(writer =>
                     {
-                        writer.WriteByte(1);
                         writer.WriteByte((byte)NetworkHandshakeResult.Rejected);
                     });
 
                     readers.Return(reader);
-                }
-                else
-                {
-                    Send(writer =>
-                    {
-                        writer.WriteByte(1);
-                        writer.WriteByte((byte)NetworkHandshakeResult.Confirmed);
-                    });
-
-                    OnAuthorized.Call();
-
-                    readers.Return(reader);
-                }
-            }
-            else
-            {
-                var messages = reader.ReadObjects();
-
-                if (messages.Length <= 0)
-                {
-                    readers.Return(reader);
                     return;
                 }
 
-                for (int i = 0; i < messages.Length; i++)
+                Send(writer =>
                 {
-                    if (messages[i] is null)
+                    writer.WriteByte((byte)NetworkHandshakeResult.Confirmed);
+                });
+
+                OnAuthorized.Call();
+
+                readers.Return(reader);
+                return;
+            }
+            else
+            {
+                var messages = reader.ReadToEnd();
+
+                for (int i = 0; i < messages.Count; i++)
+                {
+                    if (messages[i] is NetworkPingMessage pingMsg)
+                    {
+                        ProcessPing(pingMsg);
                         continue;
+                    }
 
-                    var messageType = messages[i].GetType();
-
-                    OnMessage.Call(messageType, messages[i]);
+                    OnMessage.Call(messages[i].GetType(), messages[i]);
 
                     foreach (var feature in features.Values)
                     {
-                        if (feature.isRunning && feature.HasListener(messageType))
+                        if (feature.isRunning && feature.HasListener(messages[i].GetType()))
+                        {
                             feature.Receive(messages[i]);
+                            break;
+                        }    
                     }
                 }
 
                 readers.Return(reader);
+                return;
             }
+        }
+
+        private void ProcessPing(NetworkPingMessage pingMsg)
+        {
+            if (!pingMsg.isServer)
+                return;
+
+            latency = (pingMsg.recv - pingMsg.sent).TotalMilliseconds;
+
+            if (latency > maxLatency)
+                maxLatency = latency;
+
+            if (minLatency == 0 || latency < minLatency)
+                minLatency = latency;
+
+            avgLatency = (minLatency + maxLatency) / 2;
+
+            Send(writer =>
+            {
+                writer.Write(new NetworkPingMessage(false, pingMsg.sent, pingMsg.recv));
+            });
+
+            OnPinged.Call();
         }
 
         private void UpdateDataQueue()

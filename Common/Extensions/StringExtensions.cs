@@ -10,6 +10,16 @@ namespace Common.Extensions
     {
         public static readonly char[] MultiLine = ['\r', '\n', '\x85', '\x2028', '\x2029'];
 
+        public static int GetStableHashCode(this string str)
+        {
+            var seed = 23;
+
+            for (int i = 0; i < str.Length; i++)
+                seed = (seed * 31) + (int)str[i];
+
+            return seed;
+        }
+
         public static string Compile(this IEnumerable<string> values, string separator = "\n")
             => string.Join(separator, values);
 

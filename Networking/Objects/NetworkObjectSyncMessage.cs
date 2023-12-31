@@ -7,19 +7,21 @@ namespace Networking.Objects
 {
     public struct NetworkObjectSyncMessage : ISerialize, IDeserialize
     {
-        public List<Type> syncTypes;
+        public Dictionary<short, Type> syncTypes;
 
-        public NetworkObjectSyncMessage(List<Type> syncTypes)
-            => this.syncTypes = syncTypes;
+        public NetworkObjectSyncMessage(Dictionary<short, Type> syncTypes)
+        {
+            this.syncTypes = syncTypes;
+        }
 
         public void Deserialize(Reader reader)
         {
-            syncTypes = reader.ReadList<Type>(() => reader.ReadType());
+            syncTypes = reader.ReadDictionary<short, Type>();
         }
 
         public void Serialize(Writer writer)
         {
-            writer.WriteList(syncTypes, type => writer.WriteType(type));
+            writer.WriteDictionary(syncTypes);
         }
     }
 }

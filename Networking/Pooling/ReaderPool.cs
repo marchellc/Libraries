@@ -2,7 +2,6 @@
 using Common.Pooling.Buffers;
 
 using Networking.Data;
-using Networking.Interfaces;
 
 using System;
 
@@ -13,13 +12,10 @@ namespace Networking.Pooling
         public PoolOptions Options { get; set; }
         public IPoolBuffer<Reader> Buffer { get; set; }
 
-        public ReaderPool(ITypeLibrary typeLibrary)
+        public ReaderPool()
         {
-            if (typeLibrary is null)
-                throw new ArgumentNullException(nameof(typeLibrary));
-
             Options = PoolOptions.NewOnMissing;
-            Buffer = new BasicBuffer<Reader>(this, () => new Reader(typeLibrary));
+            Buffer = new BasicBuffer<Reader>(this, () => new Reader());
         }
 
         public Reader Next(byte[] data)

@@ -2,7 +2,6 @@
 using Common.Pooling.Buffers;
 
 using Networking.Data;
-using Networking.Interfaces;
 
 using System;
 
@@ -13,13 +12,10 @@ namespace Networking.Pooling
         public PoolOptions Options { get; set; }
         public IPoolBuffer<Writer> Buffer { get; set; } 
 
-        public WriterPool(ITypeLibrary typeLibrary)
+        public WriterPool()
         {
-            if (typeLibrary is null)
-                throw new ArgumentNullException(nameof(typeLibrary));
-
             Options = PoolOptions.NewOnMissing;
-            Buffer = new BasicBuffer<Writer>(this, () => new Writer(typeLibrary));
+            Buffer = new BasicBuffer<Writer>(this, () => new Writer());
         }
 
         public Writer Next()

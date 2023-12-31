@@ -2,34 +2,32 @@
 
 namespace Networking.Objects
 {
-    public struct NetworkCallRpcMessage : IMessage
+    public struct NetworkRpcMessage : IMessage
     {
         public int objectId;
-        public int rpcId;
+        public ushort functionHash;
 
         public object[] args;
 
-        public NetworkCallRpcMessage(int objectId, int rpcId, object[] args)
+        public NetworkRpcMessage(int objectId, ushort functionHash, object[] args)
         {
             this.objectId = objectId;
-            this.rpcId = rpcId;
+            this.functionHash = functionHash;
             this.args = args;
         }
 
         public void Deserialize(Reader reader)
         {
             objectId = reader.ReadInt();
-            rpcId = reader.ReadInt();
-
-            args = reader.ReadObjects();
+            functionHash = reader.ReadUShort();
+            args = reader.ReadAnonymousArray();
         }
 
         public void Serialize(Writer writer)
         {
             writer.WriteInt(objectId);
-            writer.WriteInt(rpcId);
-
-            writer.WriteObjects(args);
+            writer.WriteUShort(functionHash);
+            writer.WriteAnonymousArray(args);
         }
     }
 }

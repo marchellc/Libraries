@@ -7,11 +7,8 @@ using System.Text;
 using System.Linq;
 using System;
 
-using Networking.Interfaces;
 using Networking.Utilities;
 using Networking.Pooling;
-
-using Utf8Json;
 
 namespace Networking.Data
 {
@@ -21,7 +18,6 @@ namespace Networking.Data
 
         private List<byte> buffer;
         private Encoding encoding;
-        private ITypeLibrary typeLib;
         private char[] charBuffer;
 
         public bool IsEmpty => buffer is null || buffer.Count <= 0;
@@ -34,19 +30,17 @@ namespace Networking.Data
         public char[] CharBuffer => charBuffer;
 
         public Encoding Encoding { get => encoding; set => encoding = value; }
-        public ITypeLibrary TypeLibrary { get => typeLib; set => typeLib = value; }
 
         public event Action OnPooled;
         public event Action OnUnpooled;
 
-        public Writer(ITypeLibrary typeLib = null) : this(Encoding.Default, typeLib) { }
+        public Writer() : this(Encoding.Default) { }
 
-        public Writer(Encoding encoding, ITypeLibrary typeLib = null)
+        public Writer(Encoding encoding)
         {
             this.encoding = encoding;
             this.charBuffer = new char[1];
             this.buffer = ListPool<byte>.Shared.Next();
-            this.typeLib = typeLib;
         }
 
         internal void ToPool()
@@ -64,9 +58,6 @@ namespace Networking.Data
 
             OnUnpooled.Call();
         }
-
-        public void WriteHeader(byte header)
-            => WriteByte((byte)(byte.MaxValue - header));
 
         public void WriteBool(bool value)
             => buffer.Add(value ? (byte)1 : (byte)0);
@@ -212,18 +203,7 @@ namespace Networking.Data
 
         public void WriteType(Type type)
         {
-            var typeId = typeLib.GetTypeId(type);
-
-            if (typeId != -1)
-            {
-                WriteByte(0);
-                WriteShort(typeId);
-            }
-            else
-            {
-                WriteByte(1);
-                WriteString(type.AssemblyQualifiedName);
-            }
+            WriteString(type.AssemblyQualifiedName);
         }
 
         public void WriteTime(TimeSpan span)
@@ -248,83 +228,119 @@ namespace Networking.Data
             WriteInt(version.Revision);
         }
 
-        public void WriteList<T>(IEnumerable<T> list, Action<T> writer)
+        public void WriteWriter(Writer writer)
         {
-            var size = list.Count();
-
-            WriteInt(size);
-
-            if (size <= 0)
-                return;
-
-            foreach (var obj in list)
-                writer.Call(obj);
+            WriteBytes(writer.Buffer);
         }
 
-        public void WriteObject(object value)
+        public void WriteAnonymous(object obj)
         {
-            if (value is null)
+            if (obj is null)
             {
-                WriteByte(0);
+                WriteBool(true);
                 return;
             }
-
-            var valueType = value.GetType();
-
-            WriteType(valueType);
-
-            if (valueType is ISerialize serialize)
-                serialize.Serialize(this);
             else
             {
-                var writer = TypeLoader.GetWriter(valueType);
 
-                if (writer is null)
-                    return;
 
-                writer.Call(this, value);
+                WriteBool(false);
+                WriteType(obj.GetType());
+
+                if (obj is IMessage msg)
+                {
+                    WriteBool(true);
+                    msg.Serialize(this);
+                }
+                else
+                {
+                    WriteBool(false);
+                    var writer = TypeLoader.GetWriter(obj.GetType());
+                    writer(this, obj);
+                }
             }
         }
 
-        public void WriteObjects(params object[] objects)
+        public void WriteAnonymousArray(object[] objects)
         {
-            var size = objects.Length;
-
-            WriteInt(size);
-
-            if (size <= 0)
-                return;
+            WriteInt(objects.Length);
 
             for (int i = 0; i < objects.Length; i++)
-                WriteObject(objects[i]);
+                WriteAnonymous(objects[i]);
         }
 
-        public void WriteObjects(IEnumerable<object> objects)
+        public void Write<T>(T value)
         {
-            var size = objects.Count();
-
-            WriteInt(size);
-
-            if (size <= 0)
+            if (value != null && value is ISerialize serialize)
+            {
+                WriteByte(0);
+                serialize.Serialize(this);
                 return;
+            }
 
-            foreach (var obj in objects)
-                WriteObject(obj);
+            var writer = TypeLoader.GetWriter(typeof(T));
+
+            if (value is null)
+            {
+                WriteByte(1);
+                return;
+            }
+            else
+            {
+                WriteByte(2);
+                writer(this, value);
+            }
         }
 
-        public void WriteJson(object value)
+        public void WriteList<T>(IEnumerable<T> items)
         {
-            if (value is null)
+            var writer = TypeLoader.GetWriter(typeof(T));
+
+            if (items != null)
+            {
+                WriteByte(1);
+
+                var size = items.Count();
+
+                WriteInt(size);
+
+                if (size <= 0)
+                    return;
+
+                foreach (var item in items)
+                    writer(this, item);
+            }
+            else
             {
                 WriteByte(0);
                 return;
             }
+        }
 
-            var valueType = value.GetType();
-            var valueBytes = JsonSerializer.NonGeneric.Serialize(value);
+        public void WriteDictionary<TKey, TValue>(IDictionary<TKey, TValue> dict)
+        {
+            var keyWriter = TypeLoader.GetWriter(typeof(TKey));
+            var valueWriter = TypeLoader.GetWriter(typeof(TValue));
 
-            WriteType(valueType);
-            WriteBytes(valueBytes);
+            if (dict != null)
+            {
+                WriteByte(1);
+                WriteInt(dict.Count);
+
+                if (dict.Count <= 0)
+                    return;
+
+                foreach (var pair in dict)
+                {
+                    keyWriter(this, pair.Key);
+                    valueWriter(this, pair.Value);
+                }
+            }
+            else
+            {
+                WriteByte(0);
+                return;
+            }
         }
 
         public void Clear()

@@ -3,6 +3,7 @@
 using Networking.Data;
 
 using System;
+using System.Linq;
 
 namespace Networking.Features
 {
@@ -39,15 +40,8 @@ namespace Networking.Features
             this.isServer = !isClient;
         }
 
-        public Writer GetWriter(byte channel)
-        {
-            var writer = getWriter();
-            writer.WriteByte(channel);
-            return writer;
-        }
-
         public Writer GetWriter()
-            => GetWriter(3);
+            => getWriter();
 
         public Reader GetReader(byte[] data)
             => getReader(data);
@@ -67,21 +61,19 @@ namespace Networking.Features
             Send(net);
         }
 
-        public void Send(byte channelId, Action<Writer> writer)
-        {
-            var net = GetWriter(channelId);
-
-            if (net is null)
-                return;
-
-            net.WriteByte(channelId);
-
-            writer.Call(net);
-
-            Send(net);
-        }
-
         public void Send(params object[] messages)
-            => Send(writer => writer.WriteList(messages, msg => writer.WriteObject(msg)));
+            => Send(writer => 
+            {
+                var msgs = messages.Where(msg => msg != null && msg is ISerialize);
+                var size = msgs.Count();
+
+                if (size <= 0)
+                    return;
+
+                writer.WriteInt(size);
+
+                foreach (var msg in msgs)
+                    (msg as ISerialize).Serialize(writer);
+            });
     }
 }

@@ -2,10 +2,11 @@
 using Common.IO.Collections;
 
 using Networking.Features;
+using Networking.Utilities;
 
 using System;
-using System.Diagnostics;
 using System.Linq;
+using System.Collections.Generic;
 using System.Reflection;
 
 namespace Networking.Objects
@@ -13,37 +14,36 @@ namespace Networking.Objects
     public class NetworkManager : NetworkFeature
     {
         public LockedDictionary<int, NetworkObject> objects;
-        public LockedDictionary<int, NetworkVariable> vars;
-
-        public LockedDictionary<int, LockedList<NetworkMethod>> methods;
-        public LockedDictionary<short, LockedDictionary<int, Tuple<MethodInfo, MethodInfo>>> methodBinding;
 
         public LockedDictionary<short, Type> objectTypes;
 
-        public int objectId;
-        public int varId;
+        public LockedDictionary<ushort, PropertyInfo> netProperties;
+        public LockedDictionary<ushort, FieldInfo> netFields;
+        public LockedDictionary<ushort, MethodInfo> netMethods;
 
+        public int objectId;
         public short objectTypeId;
 
         public override void Start()
         {
             objects = new LockedDictionary<int, NetworkObject>();
-            vars = new LockedDictionary<int, NetworkVariable>();
-            methods = new LockedDictionary<int, LockedList<NetworkMethod>>();
-
             objectTypes = new LockedDictionary<short, Type>();
-            methodBinding = new LockedDictionary<short, LockedDictionary<int, Tuple<MethodInfo, MethodInfo>>>();
 
-            varId = 0;
+            netProperties = new LockedDictionary<ushort, PropertyInfo>();
+            netFields = new LockedDictionary<ushort, FieldInfo>();
+
             objectId = 0;
             objectTypeId = 0;
 
             if (net.isServer)
+            {
                 LoadAndSendTypes();
+                Listen<NetworkCmdMessage>(OnCmd);
+            }
             else
             {
                 Listen<NetworkObjectSyncMessage>(OnSync);
-                Listen<NetworkCallRpcMessage>(OnCallRpc);
+                Listen<NetworkRpcMessage>(OnRpc);
             }
 
             Listen<NetworkObjectAddMessage>(OnCreated);
@@ -58,8 +58,9 @@ namespace Networking.Objects
             Remove<NetworkObjectSyncMessage>();
             Remove<NetworkObjectAddMessage>();
             Remove<NetworkObjectRemoveMessage>();
-            Remove<NetworkObjectSyncMessage>();
-            Remove<NetworkCallRpcMessage>();
+            Remove<NetworkVariableSyncMessage>();
+            Remove<NetworkRpcMessage>();
+            Remove<NetworkCmdMessage>();
 
             objects.Clear();
             objects = null;
@@ -67,52 +68,10 @@ namespace Networking.Objects
             objectTypes.Clear();
             objectTypes = null;
 
-            vars.Clear();
-            vars = null;
-
-            methods.Clear();
-            methods = null;
-
-            methodBinding.Clear();
-            methodBinding = null;
-
-            varId = 0;
             objectId = 0;
             objectTypeId = 0;
 
             log.Info($"Object networking unloaded.");
-        }
-
-        public int GetMethodId(NetworkObject networkObject)
-        {
-            if (networkObject is null)
-                throw new ArgumentNullException(nameof(networkObject));
-
-            var type = networkObject.GetType();
-            var trace = new StackTrace();
-            var frame = trace.GetFrame(0);
-            var callMethod = frame.GetMethod();
-
-            if (callMethod is null)
-                throw new InvalidOperationException($"Cannot retrieve calling method");
-
-            if (callMethod.DeclaringType != type)
-                throw new InvalidOperationException($"This method has to be called from the network object");
-
-            if (!objectTypes.TryGetKey(type, out var typeId))
-                throw new InvalidOperationException($"Type is not a network object");
-
-            if (!methodBinding.TryGetValue(typeId, out var methods))
-                return -1;
-
-            foreach (var method in methods)
-            {
-                if (method.Value.Item1 == callMethod
-                    || method.Value.Item2 == callMethod)
-                    return method.Key;
-            }
-
-            return -1;
         }
 
         public T Instantiate<T>() where T : NetworkObject
@@ -155,13 +114,12 @@ namespace Networking.Objects
             if (!objectTypes.TryGetKey(type, out var typeId))
                 throw new InvalidOperationException($"Cannot instantiate a non network object type");
 
-            var netObj = type.Construct(new object[] { objectId++, this });
+            var netObj = type.Construct([objectId++, this]);
 
             if (netObj is null || netObj is not NetworkObject netObjInstance)
                 throw new Exception($"Failed to instantiate type '{type.FullName}'");
 
-            RegisterVariables(netObjInstance);
-
+            netObjInstance.StartInternal();
             netObjInstance.OnStart();
 
             objects[netObjInstance.id] = netObjInstance;
@@ -170,12 +128,6 @@ namespace Networking.Objects
 
             netObjInstance.isReady = true;
             netObjInstance.isDestroyed = false;
-
-            if (methodBinding.TryGetValue(typeId, out var methods))
-            {
-                foreach (var method in methods)
-                    this.methods[method.Key].Add(new NetworkMethod(netObjInstance.id, method.Key, method.Value.Item1, method.Value.Item2, netObjInstance));
-            }
 
             log.Trace($"Instantiated network type {type.FullName} at {netObjInstance.id}");
 
@@ -194,6 +146,7 @@ namespace Networking.Objects
                 throw new InvalidOperationException($"Object is already destroyed");
 
             netObject.OnStop();
+            netObject.StopInternal();
 
             objects.Remove(netObject.id);
 
@@ -202,134 +155,43 @@ namespace Networking.Objects
             netObject.isDestroyed = true;
             netObject.isReady = false;
 
-            UnregisterVariables(netObject);
-
             log.Trace($"Destroyed network type {netObject.GetType().FullName} at {netObject.id}");
         }
 
-        public void Synchronize(NetworkVariable netVar)
+        private void OnCmd(NetworkCmdMessage cmdMsg)
         {
-            if (netVar is null)
-                throw new ArgumentNullException(nameof(netVar));
-
-            if (!vars.ContainsKey(netVar.id))
-                throw new InvalidOperationException($"Unknown variable ID");
-
-            var writer = net.GetWriter();
-
-            netVar.GetValue(writer);
-
-            net.Send(new NetworkVariableSyncMessage(netVar.id, writer.Buffer));
-
-            writer.Return();
-
-            log.Trace($"Sent a sync message for VAR {netVar.id}");
-        }
-
-        private void RegisterVariables(NetworkObject netObj)
-        {
-            var type = netObj.GetType();
-            
-            foreach (var field in type.GetAllFields())
-            {
-                if (field.IsStatic || field.IsInitOnly)
-                    continue;
-
-                if (!field.IsDefined(typeof(NetworkVariable), false))
-                    continue;
-
-                var netVar = new NetworkVariable(field.FieldType, field, netObj, varId++, netObj.id, this);
-
-                vars[netVar.id] = netVar;
-
-                log.Trace($"Registered network variable field {field.FieldType.FullName} {field.DeclaringType.FullName}.{field.Name} ({netVar.id}-{netVar.parentId})");
-            }
-
-            foreach (var prop in type.GetAllProperties())
-            {
-                if (!prop.CanWrite || !prop.CanRead || prop.SetMethod is null || prop.SetMethod.IsStatic || prop.GetMethod is null || prop.GetMethod.IsStatic)
-                    continue;
-
-                if (!prop.IsDefined(typeof(NetworkVariable), false))
-                    continue;
-
-                var netVar = new NetworkVariable(prop.PropertyType, prop, netObj, varId++, netObj.id, this);
-
-                vars[netVar.id] = netVar;
-
-                log.Trace($"Registered network variable field {prop.PropertyType.FullName} {prop.DeclaringType.FullName}.{prop.Name} ({netVar.id}-{netVar.parentId})");
-            }
-        }
-
-        private void UnregisterVariables(NetworkObject netObj)
-        {
-            var type = netObj.GetType();
-
-            foreach (var field in type.GetAllFields())
-            {
-                if (field.IsStatic || field.IsInitOnly)
-                    continue;
-
-                if (!field.IsDefined(typeof(NetworkVariable), false))
-                    continue;
-
-                var netVar = vars.FirstOrDefault(nVar => nVar.Value.parentId == netObj.id && nVar.Value.member is FieldInfo netField && netField == field);
-
-                if (netVar.Value is null)
-                    continue;
-
-                vars.Remove(netVar.Key);
-
-                netVar.Value.Dispose();
-            }
-
-            foreach (var prop in type.GetAllProperties())
-            {
-                if (!prop.CanWrite || !prop.CanRead || prop.SetMethod is null || prop.SetMethod.IsStatic || prop.GetMethod is null || prop.GetMethod.IsStatic)
-                    continue;
-
-                if (!prop.IsDefined(typeof(NetworkVariable), false))
-                    continue;
-
-                var netVar = vars.FirstOrDefault(nVar => nVar.Value.parentId == netObj.id && nVar.Value.member is PropertyInfo netProp && netProp == prop);
-
-                if (netVar.Value is null)
-                    continue;
-
-                vars.Remove(netVar.Key);
-
-                netVar.Value.Dispose();
-            }
-        }
-
-        private void OnCallRpc(NetworkCallRpcMessage rpcMessage)
-        {
-            if (!objects.TryGetValue(rpcMessage.objectId, out var netObj))
+            if (net.isClient)
                 return;
 
-            if (!methods.TryGetValue(rpcMessage.rpcId, out var netMethods))
+            if (!objects.TryGetValue(cmdMsg.objectId, out var netObj))
                 return;
 
-            var netMethod = netMethods.FirstOrDefault(netMethod => netMethod.parentId == netObj.id);
-
-            if (netMethod is null)
+            if (!netMethods.TryGetValue(cmdMsg.functionHash, out var netMethod))
                 return;
 
-            netMethod.targetRpc.Call(netMethod.reference, rpcMessage.args);
+            netMethod.Call(netObj, cmdMsg.args);
+        }
+
+        private void OnRpc(NetworkRpcMessage rpcMsg)
+        {
+            if (net.isServer)
+                return;
+
+            if (!objects.TryGetValue(rpcMsg.objectId, out var netObj))
+                return;
+
+            if (!netMethods.TryGetValue(rpcMsg.functionHash, out var netMethod))
+                return;
+
+            netMethod.Call(netObj, rpcMsg.args);
         }
 
         private void OnVarSync(NetworkVariableSyncMessage syncMsg)
         {
-            if (!vars.TryGetValue(syncMsg.variableId, out var netVar))
-                throw new InvalidOperationException($"Unknown network variable ID: {syncMsg.variableId}");
+            if (!objects.TryGetValue(syncMsg.objectId, out var netObj))
+                return;
 
-            var reader = net.GetReader(syncMsg.data);
-
-            netVar.SetValue(reader);
-
-            reader.Return();
-
-            log.Trace($"Received VAR_SYNC: {syncMsg.variableId}");
+            netObj.ProcessVarSync(syncMsg);
         }
 
         private void OnDestroyed(NetworkObjectRemoveMessage destroyMsg)
@@ -338,23 +200,12 @@ namespace Networking.Objects
                 return;
 
             netObj.OnStop();
+            netObj.StopInternal();
 
             objects.Remove(destroyMsg.objectId);
 
             netObj.isDestroyed = true;
             netObj.isReady = false;
-
-            UnregisterVariables(netObj);
-
-            if (objectTypes.TryGetKey(netObj.GetType(), out var typeId)
-                && methodBinding.TryGetValue(typeId, out var methods))
-            {
-                foreach (var method in methods)
-                {
-                    if (this.methods.ContainsKey(method.Key))
-                        this.methods[method.Key].RemoveRange(netMethod => netMethod.parentId == destroyMsg.objectId);
-                }
-            }
 
             log.Trace($"Received DESTROY: {destroyMsg.objectId}");
         }
@@ -364,11 +215,12 @@ namespace Networking.Objects
             if (!objectTypes.TryGetValue(addMsg.typeId, out var type))
                 return;
 
-            var netObj = type.Construct(new object[] { objectId++, this });
+            var netObj = type.Construct([objectId++, this]);
 
             if (netObj is null || netObj is not NetworkObject netObjInstance)
                 throw new Exception($"Failed to instantiate type '{type.FullName}'");
 
+            netObjInstance.StartInternal();
             netObjInstance.OnStart();
 
             objects[netObjInstance.id] = netObjInstance;
@@ -376,31 +228,55 @@ namespace Networking.Objects
             netObjInstance.isReady = true;
             netObjInstance.isDestroyed = false;
 
-            RegisterVariables(netObjInstance);
-
-            objectId++;
-
-            if (methodBinding.TryGetValue(addMsg.typeId, out var methods))
-            {
-                foreach (var method in methods)
-                    this.methods[method.Key].Add(new NetworkMethod(netObjInstance.id, method.Key, method.Value.Item1, method.Value.Item2, netObjInstance));
-            }
-
             log.Trace($"Received ADD: {addMsg.typeId} ({type.FullName})");
         }
 
         private void OnSync(NetworkObjectSyncMessage syncMsg)
         {
-            foreach (var type in syncMsg.syncTypes)
-                objectTypes[objectTypeId++] = type;
+            if (net.isServer)
+                return;
 
-            Remove<NetworkObjectSyncMessage>();
+            if (syncMsg.syncTypes is null || syncMsg.syncTypes.Count <= 0)
+                return;
 
-            log.Trace($"Received SYNC: {syncMsg.syncTypes.Count}");
+            foreach (var syncType in syncMsg.syncTypes)
+            {
+                objectTypes[syncType.Key] = syncType.Value;
+
+                foreach (var property in syncType.Value.GetAllProperties())
+                {
+                    if (property.Name.StartsWith("Network") && property.GetMethod != null && property.SetMethod != null
+                        && !property.GetMethod.IsStatic && !property.SetMethod.IsStatic && TypeLoader.GetWriter(property.PropertyType) != null
+                        && TypeLoader.GetReader(property.PropertyType) != null)
+                        netProperties[property.GetPropertyHash()] = property;
+                }
+
+                foreach (var field in syncType.Value.GetAllFields())
+                {
+                    if (!field.IsStatic && field.Name.StartsWith("network") && field.FieldType.InheritsType<NetworkVariable>() && !field.IsInitOnly)
+                        netFields[field.GetFieldHash()] = field;
+                }
+
+                foreach (var method in syncType.Value.GetAllMethods())
+                {
+                    if (!method.IsStatic && (method.Name.StartsWith("Cmd") || method.Name.StartsWith("Rpc")) && method.ReturnType == typeof(void))
+                    {
+                        netMethods[method.GetMethodHash()] = method;
+
+                        var methodField = method.DeclaringType.Field($"{method.Name}Hash");
+
+                        if (methodField != null && !methodField.IsInitOnly && methodField.IsStatic && methodField.FieldType == typeof(ushort))
+                            methodField.SetValueFast(method.GetMethodHash());
+                    }
+                }
+            }
         }
 
         private void LoadAndSendTypes()
         {
+            if (net.isClient)
+                throw new InvalidOperationException($"The client cannot send their types.");
+
             if (objectTypes.Count > 0)
                 throw new InvalidOperationException($"Types have already been loaded");
 
@@ -408,42 +284,41 @@ namespace Networking.Objects
             {
                 foreach (var type in assembly.GetTypes())
                 {
-                    if (type.InheritsType<NetworkObject>())
+                    if (type.InheritsType<NetworkObject>() && type.GetAllConstructors().Any(c => c.Parameters().Length == 0 && !type.ContainsGenericParameters))
                     {
-                        var nextId = objectTypeId++;
-                        var methodId = 0;
+                        objectTypes[objectTypeId++] = type;
 
-                        objectTypes[nextId] = type;
-                        methodBinding[nextId] = new LockedDictionary<int, Tuple<MethodInfo, MethodInfo>>();
+                        foreach (var property in type.GetAllProperties())
+                        {
+                            if (property.Name.StartsWith("Network") && property.GetMethod != null && property.SetMethod != null
+                                && !property.GetMethod.IsStatic && !property.SetMethod.IsStatic && TypeLoader.GetWriter(property.PropertyType) != null
+                                && TypeLoader.GetReader(property.PropertyType) != null)
+                                netProperties[property.GetPropertyHash()] = property;
+                        }
+
+                        foreach (var field in type.GetAllFields())
+                        {
+                            if (!field.IsStatic && field.Name.StartsWith("network") && field.FieldType.InheritsType<NetworkVariable>() && !field.IsInitOnly)
+                                netFields[field.GetFieldHash()] = field;
+                        }
 
                         foreach (var method in type.GetAllMethods())
                         {
-                            if (method.IsStatic || method.ReturnType != typeof(void))
-                                continue;
-
-                            if (method.Name.StartsWith("Rpc"))
+                            if (!method.IsStatic && (method.Name.StartsWith("Cmd") || method.Name.StartsWith("Rpc")) && method.ReturnType == typeof(void))
                             {
-                                var clearMethodName = method.Name.Replace("Rpc", "");
-                                var callMethod = type.Method($"CallRpc{clearMethodName}");
+                                netMethods[method.GetMethodHash()] = method;
 
-                                if (callMethod is null)
-                                    continue;
+                                var methodField = method.DeclaringType.Field($"{method.Name}Hash");
 
-                                if (!callMethod.Parameters().Select(p => p.ParameterType).SequenceEqual(method.Parameters().Select(p => p.ParameterType)))
-                                    continue;
-
-                                methodBinding[nextId][methodId++] = new Tuple<MethodInfo, MethodInfo>(method, callMethod);
+                                if (methodField != null && !methodField.IsInitOnly && methodField.IsStatic && methodField.FieldType == typeof(ushort))
+                                    methodField.SetValueFast(method.GetMethodHash());
                             }
                         }
-
-                        log.Trace($"Loaded type {type.FullName} ({objectTypeId})");
                     }
                 }
             }
 
-            net.Send(new NetworkObjectSyncMessage(objectTypes.Values.ToList()));
-
-            log.Trace($"Sent SYNC");
+            net.Send(new NetworkObjectSyncMessage(new Dictionary<short, Type>(objectTypes)));
         }
     }
 }

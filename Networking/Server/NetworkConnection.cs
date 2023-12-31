@@ -5,7 +5,6 @@ using Common.Logging;
 using Networking.Data;
 using Networking.Features;
 using Networking.Pooling;
-using Networking.Utilities;
 
 using System;
 using System.Net;
@@ -30,7 +29,6 @@ namespace Networking.Server
         public LogOutput log;
         public WriterPool writers;
         public ReaderPool readers;
-        public TypeLibrary typeLib;
         public NetworkFunctions funcs;
         public NetworkServer server;
 
@@ -65,12 +63,10 @@ namespace Networking.Server
             this.log = new LogOutput($"Network Connection ({this.remote})");
             this.log.Setup();
 
-            this.typeLib = new TypeLibrary();
-
-            this.writers = new WriterPool(typeLib);
+            this.writers = new WriterPool();
             this.writers.Initialize(20);
 
-            this.readers = new ReaderPool(typeLib);
+            this.readers = new ReaderPool();
             this.readers.Initialize(20);
 
             this.timer = new Timer(_ => UpdateDataQueue(), null, 100, 100);
@@ -100,12 +96,8 @@ namespace Networking.Server
 
             Send(writer =>
             {
-                writer.WriteByte(0);
-
-                typeLib.Write(writer);
-
                 writer.WriteVersion(NetworkServer.version);
-                writer.WriteDate(DateTime.Now);
+                writer.WriteDate(DateTime.Now.ToLocalTime());
             });
 
             this.handshakeSentAt = DateTime.Now;
@@ -174,54 +166,39 @@ namespace Networking.Server
         internal void InternalReceive(byte[] data)
         {
             var reader = readers.Next(data);
-            var channel = reader.ReadByte();
 
-            if (channel == 0)
-            {
-                var recvDate = reader.ReadDate();
-                var sentDate = reader.ReadDate();
-
-                latency = (recvDate - sentDate).TotalMilliseconds;
-
-                if (latency < minLatency || minLatency == 0)
-                    minLatency = latency;
-
-                if (latency > maxLatency)
-                    maxLatency = latency;
-
-                avgLatency = (maxLatency + minLatency) / 2;
-            }
-            else if (channel == 1)
+            if (!isAuthed)
             {
                 handshake = (NetworkHandshakeResult)reader.ReadByte();
+                readers.Return(reader);
+                return;
             }
             else
             {
-                var messages = reader.ReadObjects();
+                var messages = reader.ReadToEnd();
 
-                if (messages.Length <= 0)
+                for (int i = 0; i < messages.Count; i++)
                 {
-                    readers.Return(reader);
-                    return;
-                }
-
-                for (int i = 0; i < messages.Length; i++)
-                {
-                    if (messages[i] is null)
+                    if (messages[i] is NetworkPingMessage pingMsg)
+                    {
+                        ProcessPing(pingMsg);
                         continue;
+                    }
 
-                    var messageType = messages[i].GetType();
-
-                    OnMessage.Call(messageType, messages[i]);
+                    OnMessage.Call(messages[i].GetType(), messages[i]);
 
                     foreach (var feature in features.Values)
                     {
-                        if (feature.isRunning && feature.HasListener(messageType))
+                        if (feature.isRunning && feature.HasListener(messages[i].GetType()))
+                        {
                             feature.Receive(messages[i]);
+                            break;
+                        }
                     }
                 }
 
                 readers.Return(reader);
+                return;
             }
         }
 
@@ -270,9 +247,6 @@ namespace Networking.Server
             this.readers.Clear();
             this.readers = null;
 
-            this.typeLib.Reset();
-            this.typeLib = null;
-
             this.funcs = null;
             this.server = null;
 
@@ -283,6 +257,24 @@ namespace Networking.Server
             this.log = null;
 
             this.isAuthed = false;
+        }
+
+        private void ProcessPing(NetworkPingMessage pingMsg)
+        {
+            if (pingMsg.isServer)
+                return;
+
+            latency = (pingMsg.recv - pingMsg.sent).TotalMilliseconds;
+
+            if (latency > maxLatency)
+                maxLatency = latency;
+
+            if (minLatency == 0 || latency < minLatency)
+                minLatency = latency;
+
+            avgLatency = (minLatency + maxLatency) / 2;
+
+            OnPinged.Call();
         }
 
         private void UpdateHandshake()

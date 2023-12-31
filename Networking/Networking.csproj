@@ -65,24 +65,28 @@
     <Compile Include="Data\NetworkString.cs" />
     <Compile Include="Features\NetworkFeature.cs" />
     <Compile Include="Features\NetworkFunctions.cs" />
-    <Compile Include="Interfaces\ITypeLibrary.cs" />
     <Compile Include="NetworkHandshakeResult.cs" />
-    <Compile Include="Objects\NetworkCallRpcMessage.cs" />
+    <Compile Include="NetworkPingMessage.cs" />
+    <Compile Include="Objects\NetworkCmdMessage.cs" />
+    <Compile Include="Objects\NetworkField.cs" />
+    <Compile Include="Objects\NetworkList.cs" />
     <Compile Include="Objects\NetworkManager.cs" />
-    <Compile Include="Objects\NetworkMethod.cs" />
     <Compile Include="Objects\NetworkObject.cs" />
     <Compile Include="Objects\NetworkObjectAddMessage.cs" />
+    <Compile Include="Objects\NetworkObjectExtensions.cs" />
     <Compile Include="Objects\NetworkObjectRemoveMessage.cs" />
     <Compile Include="Objects\NetworkObjectSyncMessage.cs" />
+    <Compile Include="Objects\NetworkRpcMessage.cs" />
     <Compile Include="Objects\NetworkVariable.cs" />
-    <Compile Include="Objects\NetworkVariableAttribute.cs" />
     <Compile Include="Objects\NetworkVariableSyncMessage.cs" />
     <Compile Include="Pooling\ReaderPool.cs" />
     <Compile Include="Pooling\WriterPool.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Requests\RequestInfo.cs" />
+    <Compile Include="Requests\RequestManager.cs" />
+    <Compile Include="Requests\ResponseInfo.cs" />
     <Compile Include="Server\NetworkConnection.cs" />
     <Compile Include="Server\NetworkServer.cs" />
-    <Compile Include="Utilities\TypeLibrary.cs" />
     <Compile Include="Utilities\TypeLoader.cs" />
   </ItemGroup>
   <ItemGroup>
