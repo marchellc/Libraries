@@ -86,12 +86,14 @@
     <Compile Include="Extensions\AssemblyExtensions.cs" />
     <Compile Include="Extensions\CollectionExtensions.cs" />
     <Compile Include="Extensions\DelegateExtensions.cs" />
+    <Compile Include="Extensions\DictionaryExtensions.cs" />
     <Compile Include="Extensions\EnumExtensions.cs" />
     <Compile Include="Extensions\EventExtensions.cs" />
     <Compile Include="Extensions\FieldExtensions.cs" />
     <Compile Include="Extensions\MemberExtensions.cs" />
     <Compile Include="Extensions\MethodExtensions.cs" />
     <Compile Include="Extensions\PropertyExtensions.cs" />
+    <Compile Include="Extensions\QueueExtensions.cs" />
     <Compile Include="Extensions\ResultExtensions.cs" />
     <Compile Include="Extensions\SegmentExtensions.cs" />
     <Compile Include="Extensions\StringExtensions.cs" />

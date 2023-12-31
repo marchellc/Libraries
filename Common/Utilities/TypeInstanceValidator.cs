@@ -1,17 +1,9 @@
-﻿using Common.Logging;
-using Common.Logging.Console;
-using Common.Logging.File;
-
-using System;
+﻿using System;
 
 namespace Common.Utilities
 {
     public static class TypeInstanceValidator
     {
-        private static LogOutput log = new LogOutput("Type Validator")
-            .AddConsoleIfPresent()
-            .AddFileFromOutput(LogOutput.Common);
-
         public static bool IsValid(Type type, object instance, bool onlyNotSupplied = false)
         {
             var result = IsValid(type, instance);

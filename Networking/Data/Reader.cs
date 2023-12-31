@@ -1,9 +1,9 @@
 ﻿using Common.Extensions;
-using Common.Pooling;
 using Common.Pooling.Pools;
 
 using Networking.Interfaces;
 using Networking.Utilities;
+using Networking.Pooling;
 
 using System;
 using System.Text;
@@ -13,7 +13,7 @@ using Utf8Json;
 
 namespace Networking.Data
 {
-    public class Reader : Poolable
+    public class Reader 
     {
         public const byte BYTE_SIZE = 1;
         public const byte SBYTE_SIZE = 1;
@@ -25,6 +25,8 @@ namespace Networking.Data
         public const byte SINGLE_SIZE = 4;
         public const byte DOUBLE_SIZE = 8;
 
+        internal ReaderPool pool;
+
         private Encoding encoding;
         private List<byte> buffer;
         private ITypeLibrary typeLib;
@@ -34,7 +36,8 @@ namespace Networking.Data
         public byte[] Data => data;
         public byte[] Buffer => buffer.ToArray();
 
-        public int Offset => offset;
+        public int Offset { get => offset; set => offset = value; }
+
         public int Size => data.Length;
         public int BufferSize => buffer.Count;
 
@@ -48,7 +51,7 @@ namespace Networking.Data
         public event Action<int, int> OnMoved;
 
         public event Action OnPooled;
-        public event Action OnInitialized;
+        public event Action OnUnpooled;
 
         public Reader(ITypeLibrary typeLib = null) : this(Encoding.Default, typeLib) { }
 
@@ -58,10 +61,8 @@ namespace Networking.Data
             this.typeLib = typeLib;
         }
 
-        public override void OnAdded()
+        internal void ToPool()
         {
-            base.OnAdded();
-
             ListPool<byte>.Shared.Return(buffer);
 
             data = null;
@@ -72,16 +73,13 @@ namespace Networking.Data
             OnPooled.Call();
         }
 
-        public void Initialize(byte[] data, ITypeLibrary typeLibrary = null)
+        internal void FromPool(byte[] data)
         {
             this.buffer = ListPool<byte>.Shared.Next();
             this.data = data;
             this.encoding ??= Encoding.Default;
 
-            if (typeLibrary != null && typeLib is null)
-                typeLib = typeLibrary;
-
-            OnInitialized.Call();
+            OnUnpooled.Call();
         }
 
         public byte ReadByte()
@@ -93,6 +91,10 @@ namespace Networking.Data
         public byte[] ReadBytes()
         {
             var size = ReadInt();
+
+            if (size <= 0)
+                return Array.Empty<byte>();
+
             return ReadBytes(size);
         }
 
@@ -223,6 +225,30 @@ namespace Networking.Data
             return charValue[0];
         }
 
+        public string ReadCleanString()
+        {
+            var stringId = ReadByte();
+
+            if (stringId == 0)
+                return null;
+            else if (stringId == 1)
+                return string.Empty;
+            else
+            {
+                var stringSize = ReadInt();
+                var stringBytes = ReadBytes(stringSize);
+                var stringValue = encoding.GetString(stringBytes);
+
+                return stringValue;
+            }
+        }
+
+        public TimeSpan ReadTime()
+            => new TimeSpan(ReadLong());
+
+        public DateTime ReadDate()
+            => new DateTime(ReadShort(), ReadByte(), ReadByte(), ReadByte(), ReadByte(), ReadByte());
+
         public NetworkString ReadString()
         {
             var stringId = ReadByte();
@@ -241,8 +267,47 @@ namespace Networking.Data
             }
         }
 
-        public NetworkType ReadType()
-            => new NetworkType(ReadShort());
+        public Version ReadVersion()
+            => new Version(
+                ReadInt(),
+                ReadInt(),
+                ReadInt(),
+                ReadInt());
+
+        public Type ReadType()
+        {
+            var typeValue = ReadByte();
+
+            if (typeValue == 0)
+            {
+                var typeId = ReadShort();
+                var type = typeLib.GetType(typeId);
+
+                if (type is null)
+                    throw new TypeLoadException($"Failed to find type of ID '{typeId}'");
+
+                return type;
+            }
+            else if (typeValue == 1)
+            {
+                var typeName = ReadString();
+
+                if (typeName.isNullOrEmpty)
+                    throw new InvalidOperationException($"Cannot read type from an empty string");
+
+                var typeNameValue = typeName.GetValue();
+                var type = Type.GetType(typeNameValue);
+
+                if (type is null)
+                    throw new TypeLoadException($"Failed to find type with name '{typeNameValue}'");
+
+                return type;
+            }
+            else
+            {
+                throw new InvalidOperationException($"Unsupported type: {typeValue}");
+            }
+        }
 
         public List<T> ReadList<T>(Func<T> generator)
         {
@@ -266,14 +331,10 @@ namespace Networking.Data
                 return null;
 
             var objectTypeInfo = ReadType();
-            var objectTypeValue = objectTypeInfo.GetValue(typeLib);
 
-            if (objectTypeValue is null)
-                throw new TypeLoadException($"Type '{objectTypeInfo.TypeId}' is missing!");
-
-            if (TypeLoader.IsDeserializable(objectTypeValue))
+            if (TypeLoader.IsDeserializable(objectTypeInfo))
             {
-                var objectValue = TypeLoader.Instance(objectTypeValue);
+                var objectValue = TypeLoader.Instance(objectTypeInfo);
 
                 if (objectValue != null && objectValue is IDeserialize deserialize)
                     deserialize.Deserialize(this);
@@ -282,10 +343,10 @@ namespace Networking.Data
             }
             else
             {
-                var reader = TypeLoader.GetReader(objectTypeValue);
+                var reader = TypeLoader.GetReader(objectTypeInfo);
 
                 if (reader is null)
-                    throw new InvalidOperationException($"Cannot read type '{objectTypeValue.FullName}'");
+                    throw new InvalidOperationException($"Cannot read type '{objectTypeInfo.FullName}'");
 
                 return reader.Call(this);
             }
@@ -349,12 +410,8 @@ namespace Networking.Data
 
             var jsonBytes = ReadBytes();
             var jsonTypeInfo = ReadType();
-            var jsonTypeValue = jsonTypeInfo.GetValue(typeLib);
 
-            if (jsonTypeValue is null)
-                throw new TypeLoadException($"Type '{jsonTypeInfo.TypeId}' is missing!");
-
-            var jsonObj = JsonSerializer.NonGeneric.Deserialize(jsonTypeValue, jsonBytes);
+            var jsonObj = JsonSerializer.NonGeneric.Deserialize(jsonTypeInfo, jsonBytes);
 
             return jsonObj;
         }
@@ -368,17 +425,12 @@ namespace Networking.Data
 
             var jsonBytes = ReadBytes();
             var jsonTypeInfo = ReadType();
-            var jsonTypeValue = jsonTypeInfo.GetValue(typeLib);
-
-            if (jsonTypeValue is null)
-                throw new TypeLoadException($"Type '{jsonTypeInfo.TypeId}' is missing!");
-
-            var jsonObj = JsonSerializer.NonGeneric.Deserialize(jsonTypeValue, jsonBytes);
+            var jsonObj = JsonSerializer.NonGeneric.Deserialize(jsonTypeInfo, jsonBytes);
 
             if (jsonObj is TObject obj)
                 return obj;
 
-            throw new InvalidCastException($"Cannot cast '{jsonTypeValue.FullName}' to '{typeof(TObject).FullName}'");
+            throw new InvalidCastException($"Cannot cast '{jsonTypeInfo.FullName}' to '{typeof(TObject).FullName}'");
         }
 
         public int Read7BitEncodedInt()
@@ -410,6 +462,29 @@ namespace Networking.Data
             buffer.Clear();
             Array.Clear(data, 0, data.Length);
         }
+
+        public void Reset()
+        {
+            offset = 0;
+            buffer.Clear();
+        }
+
+        public void Reset(int newOffset)
+        {
+            offset = newOffset;
+            buffer.Clear();
+        }
+
+        public void Return()
+        {
+            if (pool is null)
+                throw new InvalidOperationException($"Cannot return to an empty pool");
+
+            pool.Return(this);
+        }
+
+        public bool IsHeader(byte expectedHeader)
+            => (ReadByte() + expectedHeader) == byte.MaxValue;
 
         private void Move(int count)
         {

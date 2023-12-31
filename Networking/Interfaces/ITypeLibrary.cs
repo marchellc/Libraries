@@ -6,14 +6,10 @@ namespace Networking.Interfaces
 {
     public interface ITypeLibrary
     {
-        Reader PendingTypes { get; set; }
-
-        bool IsSynchronized { get; }
-
         short GetTypeId(Type type);
         Type GetType(short typeId);
 
-        void SendTypes();
-        void ReceiveTypes();
+        bool Verify(Reader reader);
+        void Write(Writer writer);
     }
 }

@@ -4,29 +4,29 @@ namespace Networking.Address
 {
     public struct IPInfo
     {
-        public readonly IPType Type;
+        public readonly IPType type;
 
-        public readonly string Raw;
+        public readonly string raw;
 
-        public readonly int Port;
+        public readonly int port;
 
-        public readonly bool IsLocal;
-        public readonly bool IsRemote;
+        public readonly bool isLocal;
+        public readonly bool isRemote;
 
-        public readonly IPAddress Address;
-        public readonly IPEndPoint EndPoint;
+        public readonly IPAddress address;
+        public readonly IPEndPoint endPoint;
 
         public IPInfo(IPType type, string raw, int port, IPAddress address)
         {
-            this.Type = type;
-            this.Raw = raw;
-            this.Port = port;
-            this.Address = address;
+            this.type = type;
+            this.raw = raw;
+            this.port = port;
+            this.address = address;
 
-            this.IsLocal = type is IPType.Local;
-            this.IsRemote = type is IPType.Remote;
+            this.isLocal = type is IPType.Local;
+            this.isRemote = type is IPType.Remote;
 
-            this.EndPoint = new IPEndPoint(address, port);
+            this.endPoint = new IPEndPoint(address, port);
         }
     }
 }

@@ -1,6 +1,7 @@
 ﻿using System.Linq;
 using System.Globalization;
 using System.Net;
+using System;
 
 namespace Networking.Address
 {
@@ -8,54 +9,62 @@ namespace Networking.Address
     {
         public static bool TryParse(string ip, out IPInfo info)
         {
-            if (string.IsNullOrWhiteSpace(ip))
+            try
             {
-                info = default;
-                return false;
-            }
-
-            if (ip.Count(c => c is ':') > 1)
-            {
-                info = default;
-                return false;
-            }
-
-            if (ip.Contains(":"))
-            {
-                var ipParts = ip.Split(':');
-
-                if (ipParts.Length != 2 
-                    || !int.TryParse(ipParts[1], NumberStyles.Any, CultureInfo.InvariantCulture, out var portNum))
+                if (string.IsNullOrWhiteSpace(ip))
                 {
                     info = default;
                     return false;
                 }
 
-                if (ipParts[0].ToLower() == "localhost")
-                    ipParts[0] = "127.0.0.1";
-
-                if (!IPAddress.TryParse(ip, out var ipObj))
+                if (ip.Count(c => c is ':') > 1)
                 {
                     info = default;
                     return false;
                 }
 
-                info = new IPInfo(GetType(ipObj), ip, portNum, ipObj);
+                if (ip.Contains(":"))
+                {
+                    var ipParts = ip.Split(':');
+
+                    if (ipParts.Length != 2
+                        || !int.TryParse(ipParts[1], NumberStyles.Any, CultureInfo.InvariantCulture, out var portNum))
+                    {
+                        info = default;
+                        return false;
+                    }
+
+                    if (ipParts[0].ToLower() == "localhost")
+                        ipParts[0] = "127.0.0.1";
+
+                    if (!IPAddress.TryParse(ip, out var ipObj))
+                    {
+                        info = default;
+                        return false;
+                    }
+
+                    info = new IPInfo(GetType(ipObj), ip, portNum, ipObj);
+                    return true;
+                }
+                else if (ip.ToLower() == "localhost")
+                {
+                    ip = "127.0.0.1";
+                }
+
+                if (!IPAddress.TryParse(ip, out var ipValue))
+                {
+                    info = default;
+                    return false;
+                }
+
+                info = new IPInfo(GetType(ipValue), ip, 0, ipValue);
                 return true;
             }
-            else if (ip.ToLower() == "localhost")
-            {
-                ip = "127.0.0.1";
-            }
-
-            if (!IPAddress.TryParse(ip, out var ipValue))
+            catch 
             {
                 info = default;
                 return false;
             }
-
-            info = new IPInfo(GetType(ipValue), ip, 0, ipValue);
-            return true;
         }
 
         private static IPType GetType(IPAddress address)

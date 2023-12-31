@@ -23,24 +23,27 @@ namespace Networking.Utilities
         private static readonly List<Type> deserializableTypes = new List<Type>();
         private static readonly List<Type> unknownTypes = new List<Type>();
 
-        public static LogOutput Log;
+        public static readonly List<Type> additionalTypes = new List<Type>();
+
+        public static readonly LogOutput log;
 
         static TypeLoader()
         {
-            Log = new LogOutput("Type Loader").Setup();
+            log = new LogOutput("Type Loader");
+            log.Setup();
 
             try
             {
-                writerMethods = typeof(Writer).GetAllMethods().Where(m => !m.IsStatic && m.Name.StartsWith("Write") && m.GetParameters().Length == 1).ToArray();
-                readerMethods = typeof(Reader).GetAllMethods().Where(m => !m.IsStatic && m.Name.StartsWith("Read") && m.GetParameters().Length == 1).ToArray();
+                writerMethods = typeof(Writer).GetAllMethods().Where(m => !m.IsStatic && m.Name.StartsWith("Write") && m.Parameters().Length == 1).ToArray();
+                readerMethods = typeof(Reader).GetAllMethods().Where(m => !m.IsStatic && m.Name.StartsWith("Read") && m.Parameters().Length == 1).ToArray();
             }
             catch (Exception ex)
             {
-                Log.Error($"Failed while loading methods:\n{ex}");
+                log.Error($"Failed while loading methods:\n{ex}");
             }
 
-            Log.Debug($"Loaded {writerMethods.Length} writer methods");
-            Log.Debug($"Loaded {readerMethods.Length} reader methods");
+            log.Debug($"Loaded {writerMethods.Length} writer methods");
+            log.Debug($"Loaded {readerMethods.Length} reader methods");
 
             try
             {
@@ -50,36 +53,55 @@ namespace Networking.Utilities
                     {
                         try
                         {
-                            if (typeof(IDeserialize).IsAssignableFrom(type))
+                            if (typeof(IDeserialize).IsAssignableFrom(type)
+                                && typeof(ISerialize).IsAssignableFrom(type))
                                 deserializableTypes.Add(type);
                             else
                                 unknownTypes.Add(type);
                         }
                         catch (Exception ex)
                         {
-                            Log.Error($"Failed while loading type '{type.FullName}' in assembly '{assembly.FullName}':\n{ex}");
+                            log.Error($"Failed while loading type '{type.FullName}' in assembly '{assembly.FullName}':\n{ex}");
                         }
                     }
                 }
             }
             catch (Exception ex)
             {
-                Log.Error($"Failed while loading types:\n{ex}");
+                log.Error($"Failed while loading types:\n{ex}");
+            }
+
+            try
+            {
+                for (int i = 0; i < writerMethods.Length; i++)
+                    additionalTypes.Add(writerMethods[i].Parameters()[0].ParameterType);
+            }
+            catch (Exception ex)
+            {
+                log.Error($"Failed while loading sync types");
             }
         }
 
         public static object Instance(Type type)
         {
-            if (instanceDelegates.TryGetValue(type, out var instantiator))
-                return instantiator();
-            else
+            try
             {
-                instantiator = GenerateInstance(type);
+                if (instanceDelegates.TryGetValue(type, out var instantiator))
+                    return instantiator();
+                else
+                {
+                    instantiator = GenerateInstance(type);
 
-                if (instantiator is null)
-                    throw new InvalidOperationException($"Failed to create an instantiator for type '{type.FullName}'");
+                    if (instantiator is null)
+                        throw new InvalidOperationException($"Failed to create an instantiator for type '{type.FullName}'");
 
-                return (instanceDelegates[type] = instantiator)();
+                    return (instanceDelegates[type] = instantiator)();
+                }
+            }
+            catch (Exception ex)
+            {
+                log.Error($"Failed to create an instance of type {type.FullName}:\n{ex}");
+                return null;
             }
         }
 
@@ -106,31 +128,47 @@ namespace Networking.Utilities
 
         public static Action<Writer, object> GetWriter(Type type)
         {
-            if (writerDelegates.TryGetValue(type, out var action))
-                return action;
-            else
+            try
             {
-                action = GenerateWriter(type);
+                if (writerDelegates.TryGetValue(type, out var action))
+                    return action;
+                else
+                {
+                    action = GenerateWriter(type);
 
-                if (action is null)
-                    throw new InvalidOperationException($"Failed to generate a writer for type '{type.FullName}'");
+                    if (action is null)
+                        throw new InvalidOperationException($"Failed to generate a writer for type '{type.FullName}'");
 
-                return writerDelegates[type] = action;
+                    return writerDelegates[type] = action;
+                }
+            }
+            catch (Exception ex)
+            {
+                log.Error($"Failed to retrieve writer for type {type.FullName}:\n{ex}");
+                return null;
             }
         }
 
         public static Func<Reader, object> GetReader(Type type)
         {
-            if (readerDelegates.TryGetValue(type, out var reader))
-                return reader;
-            else
+            try
             {
-                reader = GenerateReader(type);
+                if (readerDelegates.TryGetValue(type, out var reader))
+                    return reader;
+                else
+                {
+                    reader = GenerateReader(type);
 
-                if (reader is null)
-                    throw new InvalidOperationException($"Failed to generate a reader for type '{type.FullName}'");
+                    if (reader is null)
+                        throw new InvalidOperationException($"Failed to generate a reader for type '{type.FullName}'");
 
-                return readerDelegates[type] = reader;
+                    return readerDelegates[type] = reader;
+                }
+            }
+            catch (Exception ex)
+            {
+                log.Error($"Failed while retrieving reader for type {type.FullName}:\n{ex}");
+                return null;
             }
         }
 
@@ -138,19 +176,26 @@ namespace Networking.Utilities
         {
             for (int i = 0; i < writerMethods.Length; i++)
             {
-                var methodParams = writerMethods[i].GetParameters();
+                try
+                {
+                    var methodParams = writerMethods[i].Parameters();
 
-                if (methodParams[0].ParameterType != type)
-                    continue;
+                    if (methodParams[0].ParameterType != type)
+                        continue;
 
-                var instanceExp = Expression.Parameter(typeof(Writer), "instance");
-                var parameterExp = Expression.Parameter(typeof(object), "value");
-                var callExp = Expression.Call(instanceExp, writerMethods[i], parameterExp);
-                var exp = Expression.Lambda<Action<Writer, object>>(callExp, instanceExp, parameterExp);
+                    var instanceExp = Expression.Parameter(typeof(Writer), "instance");
+                    var parameterExp = Expression.Parameter(typeof(object), "value");
+                    var callExp = Expression.Call(instanceExp, writerMethods[i], parameterExp);
+                    var exp = Expression.Lambda<Action<Writer, object>>(callExp, instanceExp, parameterExp);
 
-                Log?.Trace($"Generated WRITER: {exp}");
+                    log.Trace($"Generated WRITER: {exp}");
 
-                return exp.Compile();
+                    return exp.Compile();
+                }
+                catch (Exception ex)
+                {
+                    log.Error($"Failed while compiling a writer lambda for {writerMethods[i].ToName()}:\n{ex}");
+                }
             }
 
             return null;
@@ -160,24 +205,41 @@ namespace Networking.Utilities
         {
             for (int i = 0; i < readerMethods.Length; i++)
             {
-                var methodType = readerMethods[i].ReturnType;
+                try
+                {
+                    var methodType = readerMethods[i].ReturnType;
 
-                if (methodType != type)
-                    continue;
+                    if (methodType != type)
+                        continue;
 
-                var instanceExp = Expression.Parameter(typeof(Reader), "instance");
-                var callExp = Expression.Call(instanceExp, readerMethods[i]);
-                var exp = Expression.Lambda<Func<Reader, object>>(callExp, instanceExp);
+                    var instanceExp = Expression.Parameter(typeof(Reader), "instance");
+                    var callExp = Expression.Call(instanceExp, readerMethods[i]);
+                    var exp = Expression.Lambda<Func<Reader, object>>(callExp, instanceExp);
 
-                Log?.Trace($"Generated READER: {exp}");
+                    log.Trace($"Generated READER: {exp}");
 
-                return exp.Compile();
+                    return exp.Compile();
+                }
+                catch (Exception ex)
+                {
+                    log.Error($"Failed while compiling a writer lambda for {writerMethods[i].ToName()}:\n{ex}");
+                }
             }
 
             return null;
         }
 
         private static Func<object> GenerateInstance(Type type)
-            => Expression.Lambda<Func<object>>(Expression.New(type)).Compile();
+        {
+            try
+            {
+                return Expression.Lambda<Func<object>>(Expression.New(type)).Compile();
+            }
+            catch (Exception ex)
+            {
+                log.Error($"Failed while compiling an instance lambda for {type.FullName}:\n{ex}");
+                return null;
+            }
+        }
     }
 }

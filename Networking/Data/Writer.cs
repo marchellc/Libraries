@@ -9,13 +9,16 @@ using System;
 
 using Networking.Interfaces;
 using Networking.Utilities;
+using Networking.Pooling;
 
 using Utf8Json;
 
 namespace Networking.Data
 {
-    public class Writer : Poolable
+    public class Writer
     {
+        internal WriterPool pool;
+
         private List<byte> buffer;
         private Encoding encoding;
         private ITypeLibrary typeLib;
@@ -46,25 +49,24 @@ namespace Networking.Data
             this.typeLib = typeLib;
         }
 
-        public override void OnAdded()
+        internal void ToPool()
         {
-            base.OnAdded();
-
-            this.buffer.Return();
+            this.buffer?.Return();
             this.buffer = null;
 
             OnPooled.Call();
         }
 
-        public override void OnRemoved()
+        internal void FromPool()
         {
-            base.OnRemoved();
-
             this.buffer = ListPool<byte>.Shared.Next();
             this.encoding ??= Encoding.Default;
 
             OnUnpooled.Call();
         }
+
+        public void WriteHeader(byte header)
+            => WriteByte((byte)(byte.MaxValue - header));
 
         public void WriteBool(bool value)
             => buffer.Add(value ? (byte)1 : (byte)0);
@@ -210,7 +212,40 @@ namespace Networking.Data
 
         public void WriteType(Type type)
         {
-            WriteShort(typeLib.GetTypeId(type));
+            var typeId = typeLib.GetTypeId(type);
+
+            if (typeId != -1)
+            {
+                WriteByte(0);
+                WriteShort(typeId);
+            }
+            else
+            {
+                WriteByte(1);
+                WriteString(type.AssemblyQualifiedName);
+            }
+        }
+
+        public void WriteTime(TimeSpan span)
+            => WriteLong(span.Ticks);
+
+        public void WriteDate(DateTime date)
+        {
+            WriteShort((short)date.Year);
+
+            WriteByte((byte)date.Month);
+            WriteByte((byte)date.Day);
+            WriteByte((byte)date.Hour);
+            WriteByte((byte)date.Second);
+            WriteByte((byte)date.Millisecond);
+        }
+
+        public void WriteVersion(Version version)
+        {
+            WriteInt(version.Major);
+            WriteInt(version.Minor);
+            WriteInt(version.Build);
+            WriteInt(version.Revision);
         }
 
         public void WriteList<T>(IEnumerable<T> list, Action<T> writer)
@@ -320,6 +355,14 @@ namespace Networking.Data
             Take(array, 0, size);
 
             return array;
+        }
+
+        public void Return()
+        {
+            if (pool is null)
+                throw new InvalidOperationException($"Cannot return to pool");
+
+            pool.Return(this);
         }
     }
 }

@@ -35,6 +35,8 @@ namespace Common.Logging
 
         public LogLevel Enabled { get; set; } = LogLevel.Information | LogLevel.Warning | LogLevel.Error | LogLevel.Fatal;
 
+        public string Name { get => source; set => source = value; }
+
         public bool HasLogger<TLogger>() where TLogger : ILogger
             => loggers.Any(t => t is TLogger);
 

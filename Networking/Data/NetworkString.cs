@@ -2,27 +2,26 @@
 {
     public struct NetworkString
     {
-        public readonly bool IsEmpty;
-        public readonly bool IsNull;
-        public readonly bool IsNullOrEmpty;
+        public readonly bool isEmpty;
+        public readonly bool isNull;
+        public readonly bool isNullOrEmpty;
 
-        public readonly string Value;
+        public readonly string value;
 
         public NetworkString(bool isEmpty, bool isNull, string value)
         {
-            IsEmpty = isEmpty;
-            IsNull = isNull;
-            IsNullOrEmpty = isEmpty || isNull;
-
-            Value = value;
+            this.isEmpty = isEmpty;
+            this.isNull = isNull;
+            this.isNullOrEmpty = isEmpty || isNull;
+            this.value = value;
         }
 
         public string GetValue(string defaultValue = "")
         {
-            if (IsNullOrEmpty)
+            if (isNullOrEmpty)
                 return defaultValue;
 
-            return Value;
+            return value;
         }
     }
 }
