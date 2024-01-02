@@ -1,5 +1,4 @@
-﻿using Common.Attributes.Custom;
-using Common.Logging;
+﻿using Common.Logging;
 using Common.Extensions;
 
 using System;
@@ -20,8 +19,7 @@ namespace Common.Instances
 
         public static LogOutput Log = new LogOutput("Instance Manager");
 
-        [Init]
-        private static void Init()
+        internal static void Init()
         {
             Log.Setup();
             Log.Info("Initialized.");

@@ -42,7 +42,7 @@ namespace Networking.Utilities
                 if (method.IsStatic)
                     continue;
 
-                if (method.Name.StartsWith("Read") && method.ReturnType != typeof(void) && method.Parameters().Length == 0)
+                if (method.Name.StartsWith("Read") && method.ReturnType != typeof(void) && method.Parameters().Length == 0 && !method.ContainsGenericParameters)
                 {
                     var readType = method.ReturnType;
 
@@ -50,10 +50,8 @@ namespace Networking.Utilities
                         continue;
 
                     readers[readType] = reader => method.Call(reader);
-
-                    log.Trace($"Cached default reader: {readType.FullName} ({method.ToName()})");
                 }
-                else if (method.Name.StartsWith("Write") && method.ReturnType == typeof(void))
+                else if (method.Name.StartsWith("Write") && method.ReturnType == typeof(void) && !method.ContainsGenericParameters)
                 {
                     var methodParams = method.Parameters();
 
@@ -66,8 +64,6 @@ namespace Networking.Utilities
                         continue;
 
                     writers[writeType] = (writer, value) => method.Call(writer, value);
-
-                    log.Trace($"Cached default writer: {writeType.FullName} ({method.ToName()})");
                 }
             }
 
@@ -89,7 +85,7 @@ namespace Networking.Utilities
 
                             readers[method.ReturnType] = reader => method.Call(null, reader);
 
-                            log.Trace($"Cached custom reader: {method.ReturnType.FullName} ({method.ToName()})");
+                            log.Debug($"Cached custom reader: {method.ReturnType.FullName} ({method.ToName()})");
                         }
                         else if (method.ReturnType == typeof(void) && methodParams.Length == 1 && methodParams[0].ParameterType == typeof(Writer))
                         {
@@ -98,15 +94,13 @@ namespace Networking.Utilities
 
                             writers[methodParams[0].ParameterType] = (writer, value) => method.Call(null, writer, value);
 
-                            log.Trace($"Cached custom writer: {methodParams[0].ParameterType.FullName} ({method.ToName()})");
+                            log.Debug($"Cached custom writer: {methodParams[0].ParameterType.FullName} ({method.ToName()})");
                         }
                     }
                 }
             }
 
-            log.Trace($"Type Loader has finished.\n" +
-                $"WRITERS: {writers.Count}\n" +
-                $"READERS: {readers.Count}");
+            log.Info($"Cache: {writers.Count}/{readers.Count}");
         }
 
         public static Action<Writer, object> GetWriter(this Type type)

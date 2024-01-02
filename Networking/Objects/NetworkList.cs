@@ -17,7 +17,6 @@ namespace Networking.Objects
         {
             list = new LockedList<T>();
 
-            // make sure that we have a writer & reader
             TypeLoader.GetWriter(typeof(T));
             TypeLoader.GetReader(typeof(T));
         }
@@ -40,13 +39,13 @@ namespace Networking.Objects
 
             writer.Write(item);
 
-            pending.Add(new NetworkListUpdateMessage(NetworkListUpdateMessage.ListOp.Add, writer));
+            pending.Enqueue(new NetworkListUpdateMessage(NetworkListUpdateMessage.ListOp.Add, writer));
         }
 
         public void Clear()
         {
             list.Clear();
-            pending.Add(new NetworkListUpdateMessage(NetworkListUpdateMessage.ListOp.Clear, null));
+            pending.Enqueue(new NetworkListUpdateMessage(NetworkListUpdateMessage.ListOp.Clear, null));
         }
 
         public void Insert(int index, T item)
@@ -60,7 +59,7 @@ namespace Networking.Objects
                 writer.WriteInt(index);
                 writer.Write(item);
 
-                pending.Add(new NetworkListUpdateMessage(NetworkListUpdateMessage.ListOp.Set, writer));
+                pending.Enqueue(new NetworkListUpdateMessage(NetworkListUpdateMessage.ListOp.Set, writer));
             }
         }
 
@@ -77,7 +76,7 @@ namespace Networking.Objects
 
                 writer.WriteInt(index);
 
-                pending.Add(new NetworkListUpdateMessage(NetworkListUpdateMessage.ListOp.Remove, writer));
+                pending.Enqueue(new NetworkListUpdateMessage(NetworkListUpdateMessage.ListOp.Remove, writer));
 
                 return true;
             }
@@ -95,7 +94,7 @@ namespace Networking.Objects
 
                 writer.WriteInt(index);
 
-                pending.Add(new NetworkListUpdateMessage(NetworkListUpdateMessage.ListOp.Remove, writer));
+                pending.Enqueue(new NetworkListUpdateMessage(NetworkListUpdateMessage.ListOp.Remove, writer));
             }
         }
 
@@ -109,9 +108,9 @@ namespace Networking.Objects
 
         IEnumerator IEnumerable.GetEnumerator() => list.GetEnumerator();
 
-        public override void Process(IDeserialize deserialize)
+        public override void Process(IMessage msg)
         {
-            if (deserialize is not NetworkListUpdateMessage updateMsg)
+            if (msg is not NetworkListUpdateMessage updateMsg)
                 return;
 
             switch (updateMsg.op)
@@ -179,6 +178,10 @@ namespace Networking.Objects
         public void Deserialize(Reader reader)
         {
             this.op = (ListOp)reader.ReadByte();
+
+            if (this.op == ListOp.Clear)
+                return;
+
             this.reader = reader.ReadReader();
         }
 

@@ -1,5 +1,4 @@
-﻿using Common.Logging.Console;
-using Common.Logging.File;
+﻿using Common.Logging.File;
 
 using System;
 using System.IO;

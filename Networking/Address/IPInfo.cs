@@ -16,17 +16,23 @@ namespace Networking.Address
         public readonly IPAddress address;
         public readonly IPEndPoint endPoint;
 
-        public IPInfo(IPType type, string raw, int port, IPAddress address)
+        public IPInfo(IPType type, int port, IPAddress address)
         {
             this.type = type;
-            this.raw = raw;
             this.port = port;
             this.address = address;
 
             this.isLocal = type is IPType.Local;
             this.isRemote = type is IPType.Remote;
 
+            this.raw = address.ToString();
             this.endPoint = new IPEndPoint(address, port);
         }
+
+        public override string ToString()
+            => endPoint.ToString();
+
+        public override int GetHashCode()
+            => endPoint.GetHashCode();
     }
 }

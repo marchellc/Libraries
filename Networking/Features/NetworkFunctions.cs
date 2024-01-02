@@ -62,18 +62,6 @@ namespace Networking.Features
         }
 
         public void Send(params object[] messages)
-            => Send(writer => 
-            {
-                var msgs = messages.Where(msg => msg != null && msg is ISerialize);
-                var size = msgs.Count();
-
-                if (size <= 0)
-                    return;
-
-                writer.WriteInt(size);
-
-                foreach (var msg in msgs)
-                    (msg as ISerialize).Serialize(writer);
-            });
+            => Send(writer => writer.WriteAnonymousArray(messages));
     }
 }

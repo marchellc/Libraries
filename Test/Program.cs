@@ -1,15 +1,15 @@
-﻿using System.IO;
+﻿using Common.Logging;
+
+using Common.Utilities;
+
+using Networking.Client;
+using Networking.Data;
+using Networking.Objects;
+using Networking.Requests;
+using Networking.Server;
+
 using System.Net;
-using System.Linq;
 using System.Threading.Tasks;
-
-using Network.Tcp;
-using Network.Extensions;
-
-using Network.Synchronization;
-using Network.Requests;
-using Network.Interfaces.Transporting;
-using Common.Logging;
 
 namespace Test
 {
@@ -17,83 +17,128 @@ namespace Test
     {
         public static async Task Main(string[] args)
         {
-            if (args.Any(c => c.Contains("server")))
+            var log = LogOutput.Common;
+            var isServer = ConsoleArgs.HasSwitch("server");
+
+            if (isServer)
             {
-                var server = new TcpServer();
+                log.Info("Starting server ..");
 
-                server.TrySetAddress(IPAddress.Any, 7777);
+                var serverPort = ConsoleArgs.GetValue("port");
 
-                server.Features.AddFeature<SynchronizationManager>();
-                server.Features.AddFeature<RequestManager>();
-
-                server.OnConnected += peer =>
+                if (!int.TryParse(serverPort, out var serverPortValue))
                 {
-                    var req = peer.Features.GetFeature<RequestManager>();
+                    log.Info("Invalid server port");
+                    await Task.Delay(-1);
+                }
 
-                    req.CreateHandler<TestRequestMessage>((reqInfo, msg) =>
+                log.Info($"Port: {serverPortValue}");
+
+                NetworkServer.instance.port = serverPortValue;
+
+                NetworkServer.instance.Add<NetworkManager>();
+
+                NetworkServer.instance.Start();
+
+                NetworkServer.instance.OnConnected += conn =>
+                {
+                    CodeUtils.Delay(() =>
                     {
-                        reqInfo.Success(new TestResponseMessage { Number = msg.Number + 5 });
-                    });
-                };
+                        var netManager = conn.Get<NetworkManager>();
 
-                server.Start();
+                        CodeUtils.Delay(() =>
+                        {
+                            var testObj = netManager.Instantiate<TestObject>();
+                        }, 200);
+                    }, 200);
+                };
             }
             else
             {
-                var client = new TcpClient(new IPEndPoint(IPAddress.Loopback, 7777));
-                var number = 5;
-                var expected = 10;
+                log.Info("Starting client ..");
 
-                client.Features.AddFeature<SynchronizationManager>();
-                client.Features.AddFeature<RequestManager>();
+                var clientPort = ConsoleArgs.GetValue("port");
 
-                client.OnConnected += peer =>
+                if (!int.TryParse(clientPort, out var clientPortValue))
                 {
-                    var req = peer.Features.GetFeature<RequestManager>();
+                    log.Info("Invalid client port");
+                    await Task.Delay(-1);
+                }
 
-                    req.Request<TestRequestMessage, TestResponseMessage>(new TestRequestMessage { Number = number }, 0, (res, msg) => 
-                    {
-                        if (msg.Number != expected)
-                            LogOutput.Common.Error("Not the expected number");
-                        else
-                            LogOutput.Common.Info("Expected number");
-                    });
+                log.Info($"Port: {clientPortValue}");
+
+                NetworkClient.instance.Add<NetworkManager>();
+                NetworkClient.instance.Connect(new IPEndPoint(IPAddress.Loopback, clientPortValue));
+                NetworkClient.instance.OnConnected += () =>
+                {
+                    var netManager = NetworkClient.instance.Get<NetworkManager>();
+                    var testObj = netManager.Instantiate<TestObject>();
                 };
-
-                client.Start();
             }
 
             await Task.Delay(-1);
         }
     }
 
-    public struct TestRequestMessage : IMessage
+    public class TestObject : NetworkObject
     {
-        public int Number;
-
-        public void Read(BinaryReader reader, ITransport transport)
+        public TestObject(NetworkManager manager) : base(manager)
         {
-            Number = reader.ReadInt32();
         }
 
-        public void Write(BinaryWriter writer, ITransport transport)
-        {
-            writer.Write(Number);
-        }
-    }
+        public NetworkList<string> networkListTest;
+        public int prevSize = 0;
+        public bool isRemoved;
 
-    public struct TestResponseMessage : IMessage
-    {
-        public int Number;
-
-        public void Read(BinaryReader reader, ITransport transport)
+        public override void OnStart()
         {
-            Number = reader.ReadInt32();
-        }
+            CodeUtils.WhileTrue(() => !isDestroyed && isReady, () =>
+            {
+                if (net.isServer)
+                {
+                    if (networkListTest.Count >= 10)
+                    {
+                        if (!isRemoved)
+                        {
+                            var randomIndex = Generator.Instance.GetInt32(0, networkListTest.Count);
+                            LogOutput.Common.Verbose($"Removing item at random index");
+                            var size = networkListTest.Count;
+                            networkListTest.RemoveAt(randomIndex);
+                            LogOutput.Common.Verbose($"After removal: {size} ({networkListTest.Count})");
+                            isRemoved = true;
+                        }
+                        else
+                        {
+                            LogOutput.Common.Info($"Clearing list");
+                            networkListTest.Clear();
+                            LogOutput.Common.Info($"Count: {networkListTest.Count}");
+                            isRemoved = false;
+                        }
 
-        public void Write(BinaryWriter writer, ITransport transport)
-        {
-            writer.Write(Number);
+                        return;
+                    }
+
+                    var value = Generator.Instance.GetString();
+                    networkListTest.Add(value);
+                    LogOutput.Common.Verbose($"Added value to list: {value} ({networkListTest.Count})");
+                }
+                else
+                {
+                    if (networkListTest.Count != prevSize)
+                    {
+                        LogOutput.Common.Verbose($"List size changed (from {prevSize} to {networkListTest.Count})");
+
+                        prevSize = networkListTest.Count;
+
+                        for (int i = 0; i < networkListTest.Count; i++)
+                            LogOutput.Common.Verbose($"{networkListTest[i]}");
+                    }
+                    else
+                    {
+                        LogOutput.Common.Verbose($"List has not changed");
+                    }
+                }
+            }, 1500);
         }
     }
 }

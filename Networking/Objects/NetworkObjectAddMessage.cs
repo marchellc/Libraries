@@ -2,17 +2,17 @@
 
 namespace Networking.Objects
 {
-    public struct NetworkObjectAddMessage : ISerialize, IDeserialize
+    public struct NetworkObjectAddMessage : IMessage
     {
-        public short typeId;
+        public ushort typeHash;
 
-        public NetworkObjectAddMessage(short typeId)
-            => this.typeId = typeId;
+        public NetworkObjectAddMessage(ushort typeHash)
+            => this.typeHash = typeHash;
 
         public void Deserialize(Reader reader)
-            => typeId = reader.ReadShort();
+            => typeHash = reader.ReadUShort();
 
         public void Serialize(Writer writer)
-            => writer.WriteShort(typeId);
+            => writer.WriteUShort(typeHash);
     }
 }

@@ -1,13 +1,15 @@
 ﻿using Common.Attributes;
 using Common.Attributes.Custom;
 using Common.Logging;
+using Common.Instances;
+using Common.Utilities;
 using Common.Extensions;
+using Common.IO;
 
 using System;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.IO;
 using System.Reflection;
+using System.Linq;
 
 namespace Common
 {
@@ -22,52 +24,89 @@ namespace Common
         public static bool IsTraceBuild { get; private set; }
         public static bool IsInitialized { get; private set; }
 
-        public static List<string> Args { get; } = new List<string>();
-
         public static DateTime InitializedAt { get; private set; }
+
         public static Assembly Assembly { get; private set; }
+        public static Version Version { get; private set; }
+
+        public static Directory Directory { get; private set; }
 
         public static void Initialize()
         {
             if (IsInitialized)
                 return;
 
-            IsInitialized = true;
-
-#if DEBUG
-            IsDebugBuild = true;
-#elif TRACE
-            IsTraceBuild = true;
-#endif
-
-            Args.Clear();
-
             try
             {
-                Args.AddRange(Environment.GetCommandLineArgs());
-            }
-            catch { }
+                var initStarted = DateTime.Now;
 
-            Assembly = Assembly.GetExecutingAssembly();
+                IsInitialized = true;
 
-            LogOutput.Init();
+#if DEBUG
+                IsDebugBuild = true;
+#elif TRACE
+                IsTraceBuild = true;
+#endif
 
-            AttributeCollector.ForEach<InitAttribute>((data, attr) =>
-            {
-                if (data.Member is null || data.Member is not MethodBase method)
-                    return;
+                Assembly = Assembly.GetExecutingAssembly();
+                Version = Assembly.GetName().Version;
 
-                method.Call(data.Instance, ex =>
+                var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+
+                if (!System.IO.Directory.Exists($"{appData}/CommonLib"))
+                    System.IO.Directory.CreateDirectory($"{appData}/CommonLib");
+
+                var appName = GetAppName();
+
+                if (!System.IO.Directory.Exists($"{appData}/CommonLib/{appName}"))
+                    System.IO.Directory.CreateDirectory($"{appData}/CommonLib/{appName}");
+
+                Directory = new Directory($"{appData}/CommonLib/{appName}");
+
+                LogOutput.Init();
+
+                ConsoleArgs.Parse(Environment.GetCommandLineArgs().Skip(1).ToArray());
+
+                if (IsDebugBuild || ConsoleArgs.HasSwitch("debug"))
+                    LogOutput.Common.Enable(LogLevel.Debug);
+
+                LogOutput.Common.Info("Initializing Attribute Manager ..");
+
+                AttributeCollector.Init();
+
+                LogOutput.Common.Info("Initializing Instance Manager ..");
+
+                InstanceManager.Init();
+
+                if (LogUtils.IsConsoleAvailable && !ConsoleArgs.HasSwitch("disableCommands"))
                 {
-                    LogOutput.Common.Error($"Failed to invoke init-method '{method.DeclaringType.FullName}::{method.Name}':\n{ex}");
+                    LogOutput.Common.Info("Initializing commands ..");
+                    ConsoleCommands.Enable();
+                }
+
+                LogOutput.Common.Info($"Directory: {Directory.Path}");
+
+                AttributeCollector.ForEach<InitAttribute>((data, attr) =>
+                {
+                    if (data.Member is null || data.Member is not MethodBase method)
+                        return;
+
+                    method.Call(data.Instance, ex =>
+                    {
+                        LogOutput.Common.Error($"Failed to invoke init-method '{method.DeclaringType.FullName}::{method.Name}':\n{ex}");
+                    });
                 });
-            });
 
-            InitializedAt = DateTime.Now;
+                InitializedAt = DateTime.Now;
 
-            OnInitialized.Call();
+                OnInitialized.Call();
 
-            LogOutput.Common.Info($"Library initialized!");
+                LogOutput.Common.Info($"Library initialized (version: {Version}, time: {DateTime.Now.ToString("G")}), took {(InitializedAt - initStarted).TotalSeconds} second(s)!");
+            }
+            catch (Exception ex)
+            {
+                LogOutput.Common.Raw(ex, ConsoleColor.Red);
+            }
         }
 
         public static void Unload()
@@ -100,21 +139,25 @@ namespace Common
 
         public static string GetAppName()
         {
-            if (cachedAppName != null)
-                return cachedAppName;
-
-            var entryAssembly = Assembly.GetEntryAssembly();
-
-            if (entryAssembly != null)
+            try
             {
-                var entryName = entryAssembly.GetName();
+                if (cachedAppName != null)
+                    return cachedAppName;
 
-                if (entryName != null && !string.IsNullOrWhiteSpace(entryName.Name))
-                    return cachedAppName = entryName.Name;
+                var entryAssembly = Assembly.GetEntryAssembly();
+
+                if (entryAssembly != null)
+                {
+                    var entryName = entryAssembly.GetName();
+
+                    if (entryName != null && !string.IsNullOrWhiteSpace(entryName.Name))
+                        return cachedAppName = entryName.Name;
+                }
+
+                using (var proc = Process.GetCurrentProcess())
+                    return cachedAppName = System.IO.Path.GetFileNameWithoutExtension(proc.ProcessName);
             }
-
-            using (var proc = Process.GetCurrentProcess())
-                return cachedAppName = Path.GetFileNameWithoutExtension(proc.ProcessName);
+            catch { return "Default App"; } 
         }
     }
 }

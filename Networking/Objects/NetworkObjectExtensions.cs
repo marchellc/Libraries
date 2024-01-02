@@ -1,5 +1,6 @@
 ﻿using Common.Extensions;
 
+using System;
 using System.Reflection;
 
 namespace Networking.Objects
@@ -14,5 +15,8 @@ namespace Networking.Objects
 
         public static ushort GetMethodHash(this MethodInfo method)
             => (ushort)((method.DeclaringType.Name + "+" + method.Name).GetStableHashCode() & 0xFFFF);
+
+        public static ushort GetTypeHash(this Type type)
+            => (ushort)(type.FullName.GetStableHashCode() & 0xFFFF);
     }
 }

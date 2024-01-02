@@ -1,7 +1,7 @@
 ﻿using Common.Extensions;
 using Common.IO.Collections;
 using Common.Logging;
-
+using Common.Utilities;
 using Networking.Features;
 
 using System;
@@ -52,24 +52,42 @@ namespace Networking.Server
             if (isRunning)
                 Stop();
 
-            this.server = new Telepathy.Server(int.MaxValue - 10);
-            this.server.NoDelay = isNoDelay;
+            log.Info($"Starting the server ..");
 
-            this.server.OnConnected = OnClientConnected;
-            this.server.OnDisconnected = OnClientDisconnected;
-            this.server.OnData = OnClientData;
+            try
+            {
+                this.server = new Telepathy.Server(1024 * 1024 * 10);
+                this.server.NoDelay = true;
 
-            this.server.Start(port);
+                this.server.OnConnected = OnClientConnected;
+                this.server.OnDisconnected = OnClientDisconnected;
+                this.server.OnData = OnClientData;
 
-            this.isRunning = true;
+                this.isRunning = true;
 
-            OnStarted.Call();
+                CodeUtils.WhileTrue(() => isRunning, () =>
+                {
+                    this.server.Tick(100);
+                }, 100);
+
+                this.server.Start(port);
+
+                OnStarted.Call();
+
+                log.Info($"Server started.");
+            }
+            catch (Exception ex)
+            {
+                log.Error(ex);
+            }
         }
 
         public void Stop()
         {
             if (!isRunning)
                 throw new InvalidOperationException($"The server is not running!");
+
+            log.Info($"Stopping the server ..");
 
             this.server.Stop();
 
@@ -84,6 +102,8 @@ namespace Networking.Server
             this.isRunning = false;
 
             OnStopped.Call();
+
+            log.Info($"Server stopped.");
         }
 
         public void Add<T>() where T : NetworkFeature
@@ -92,17 +112,22 @@ namespace Networking.Server
                 return;
 
             requestFeatures.Add(typeof(T));
+
+            log.Trace($"Added feature: {typeof(T).FullName}");
         }
 
         public void Remove<T>() where T : NetworkFeature
         {
-            requestFeatures.Remove(typeof(T));
+            if (requestFeatures.Remove(typeof(T)))
+                log.Trace($"Removed feature: {typeof(T).FullName}");
         }
 
         private void OnClientData(int connId, ArraySegment<byte> data)
         {
             if (!connections.TryGetValue(connId, out var connection))
                 return;
+
+            log.Trace($"Received client data connId={connId}");
 
             var array = data.ToArray();
 
@@ -113,11 +138,13 @@ namespace Networking.Server
 
         private void OnClientConnected(int connId)
         {
-            var connection = new NetworkConnection(connId, this);
+            var connection = new NetworkConnection(connId, this, isNoDelay);
 
             connections[connId] = connection;
 
             OnConnected.Call(connection);
+
+            log.Info($"Client connected from {connection.remote} connId={connId}");
         }
 
         private void OnClientDisconnected(int connId)
@@ -126,6 +153,8 @@ namespace Networking.Server
                 return;
 
             OnDisconnected.Call(connection);
+
+            log.Info($"Client disconnected from {connection.remote} connId={connId}");
 
             connection.Stop();
 

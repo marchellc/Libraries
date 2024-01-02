@@ -7,6 +7,7 @@ using Networking.Pooling;
 using System;
 using System.Text;
 using System.Collections.Generic;
+using Common.Logging;
 
 namespace Networking.Data
 {
@@ -240,7 +241,7 @@ namespace Networking.Data
             => new TimeSpan(ReadLong());
 
         public DateTime ReadDate()
-            => new DateTime(ReadShort(), ReadByte(), ReadByte(), ReadByte(), ReadByte(), ReadByte());
+            => new DateTime(ReadLong());
 
         public NetworkString ReadString()
         {
@@ -321,15 +322,15 @@ namespace Networking.Data
                     {
                         var item = typeof(T).Construct();
 
-                        if (item is null || item is not IDeserialize deserialize)
+                        if (item is null || item is not IMessage msg)
                             throw new Exception($"Invalid data signature");
 
-                        deserialize.Deserialize(this);
+                        msg.Deserialize(this);
 
-                        if (deserialize is not T tDeserialize)
-                            throw new InvalidCastException($"Cannot cast {deserialize.GetType().FullName} to {typeof(T).FullName}");
+                        if (msg is not T tMsg)
+                            throw new InvalidCastException($"Cannot cast {msg.GetType().FullName} to {typeof(T).FullName}");
 
-                        return tDeserialize;
+                        return tMsg;
                     }
 
                 case 1:
@@ -443,32 +444,6 @@ namespace Networking.Data
             }
         }
 
-        public List<IDeserialize> ReadToEnd()
-        {
-            var size = ReadInt();
-            var list = new List<IDeserialize>();
-
-            if (size <= 0)
-                return list;
-
-            list.Capacity = size;
-
-            for (int i = 0; i < size; i++)
-            {
-                var type = ReadType();
-                var message = type.Construct();
-
-                if (message is null || message is not IDeserialize deserialize)
-                    continue;
-
-                deserialize.Deserialize(this);
-
-                list.Add(deserialize);
-            }
-
-            return list;
-        }
-
         public int Read7BitEncodedInt()
         {
             var count = 0;
@@ -529,7 +504,10 @@ namespace Networking.Data
             var current = offset;
 
             for (int i = 0; i < count; i++)
-                buffer.Add(data[offset++]);
+            {
+                buffer.Add(data[offset]);
+                offset++;
+            }
 
             OnMoved.Call(current, offset);
         }

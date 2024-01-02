@@ -31,9 +31,11 @@ namespace Common.Logging
                 else
                     this.source = $"{method.DeclaringType.Name}";
             }
+
+            Enabled = LogUtils.General | LogUtils.Debug;
         }
 
-        public LogLevel Enabled { get; set; } = LogLevel.Information | LogLevel.Warning | LogLevel.Error | LogLevel.Fatal;
+        public LogLevel Enabled { get; set; }
 
         public string Name { get => source; set => source = value; }
 
@@ -153,8 +155,11 @@ namespace Common.Logging
         internal static void Init()
         {
             Common = new LogOutput("Common Library");
+
             Common.AddConsoleIfPresent();
             Common.AddFileWithPrefix("General Log");
+
+            Common.Info("Logging initialized.");
         }
     }
 }

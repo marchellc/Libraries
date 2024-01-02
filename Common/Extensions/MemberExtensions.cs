@@ -1,6 +1,4 @@
-﻿using Common.Pooling.Pools;
-
-using Fasterflect;
+﻿using Fasterflect;
 
 using System;
 using System.Collections.Generic;
@@ -26,57 +24,47 @@ namespace Common.Extensions
 
             if (member is MethodInfo method)
             {
-                var builder = StringBuilderPool.Shared.Next();
+                var str = "";
 
                 if (method.IsPublic)
-                    builder.Append("public ");
+                    str += "public ";
                 else if (method.IsPrivate)
-                    builder.Append("private ");
+                    str += "private ";
 
                 if (method.IsInstance())
-                    builder.Append("instance ");
+                    str += "instance ";
                 else
-                    builder.Append("static ");
+                    str += "static ";
 
-                builder.Append("method ");
-                builder.Append(method.ReturnType.FullName);
-                builder.Append($" {method.DeclaringType.FullName}.{method.Name}");
+                str += $"method {method.ReturnType.FullName} {method.DeclaringType.FullName}.{method.Name}";
 
                 var methodParams = method.Parameters();
 
                 if (methodParams.Length <= 0)
-                    builder.Append("()");
+                    str += "()";
                 else
                 {
-                    builder.Append("(");
+                    str += "(";
 
                     for (int i = 0; i < methodParams.Length; i++)
                     {
                         if (methodParams[i].ParameterType.IsByRef)
-                            builder.Append("ref ");
+                            str += "ref ";
 
                         if (methodParams[i].IsOut)
-                            builder.Append("out ");
+                            str += "out ";
 
                         if (methodParams[i].IsDefined(typeof(ParamArrayAttribute)))
-                            builder.Append("params ");
+                            str += "params ";
 
-                        builder.Append(methodParams[i].ParameterType.FullName);
-                        builder.Append($" {methodParams[i].Name}");
-
-                        if (i + 1 < methodParams.Length)
-                            builder.Append(", ");
+                        str += $"{methodParams[i].ParameterType.FullName} {methodParams[i].Name}, ";
                     }
 
-                    var str = builder.ToString();
-
-                    builder.Clear();
-
-                    builder.Append(str.TrimEnd(' ', ','));
-                    builder.Append(")");
+                    str = str.TrimEnd(' ', ',');
+                    str += ")";
                 }
 
-                PreviouslyGeneratedNames[method] = StringBuilderPool.Shared.StringReturn(builder);
+                return PreviouslyGeneratedNames[method] = str;
             }
 
             if (member is Type type)
@@ -87,19 +75,17 @@ namespace Common.Extensions
 
             if (member is PropertyInfo property)
             {
-                var builder = StringBuilderPool.Shared.Next();
+                var str = "";
 
                 if (property.GetGetMethod(true) != null)
-                    builder.Append("get");
+                    str += "get";
 
                 if (property.GetSetMethod(true) != null)
-                    builder.Append(builder.Length >= 3 ? "-set" : "set");
+                    str += str != "" ? "-get" : "set";
 
-                builder.Append(" property");
-                builder.Append(property.PropertyType.FullName);
-                builder.Append($" {property.DeclaringType.FullName}.{property.Name}");
+                str += $" property {property.PropertyType.FullName} {property.DeclaringType.FullName}.{property.Name}";
 
-                return PreviouslyGeneratedNames[property] = StringBuilderPool.Shared.StringReturn(builder);
+                return PreviouslyGeneratedNames[property] = str;
             }
 
             if (member is EventInfo eventInfo)

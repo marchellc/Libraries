@@ -3,6 +3,7 @@ using Common.Logging;
 using Common.Logging.Console;
 using Common.Logging.File;
 using Common.Extensions;
+using Common.Attributes.Custom;
 
 using System;
 using System.Diagnostics;
@@ -17,7 +18,7 @@ namespace Common.Utilities.Exceptions
 
         public static ExceptionSettings Settings { get; set; } = ExceptionSettings.LogUnhandled | ExceptionSettings.LogHandled;
 
-        public static LogOutput Output { get; } = new LogOutput("Exception Manager");
+        public static LogOutput Output { get; private set; } = new LogOutput("Exception Manager");
 
         public static Func<Exception, string> ExceptionFormatter { get; set; } = ExceptionUtils.FormatException;
         public static Func<StackFrame[], string> TraceFormatter { get; set; } = ExceptionUtils.FormatTrace;
@@ -25,7 +26,8 @@ namespace Common.Utilities.Exceptions
         public static event Action<Exception> OnThrown;
         public static event Action<Exception> OnUnhandled;
 
-        static ExceptionManager()
+        [Init]
+        private static void Init()
         {
             allExceptions = new LockedList<Exception>();
             unhandledExceptions = new LockedList<Exception>();

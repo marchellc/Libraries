@@ -10,11 +10,14 @@ using System;
 using Networking.Utilities;
 using Networking.Pooling;
 
+using Common.Logging;
+
 namespace Networking.Data
 {
     public class Writer
     {
         internal WriterPool pool;
+        internal LogOutput log = new LogOutput("Network Writer").Setup();
 
         private List<byte> buffer;
         private Encoding encoding;
@@ -59,14 +62,14 @@ namespace Networking.Data
             OnUnpooled.Call();
         }
 
-        public void WriteBool(bool value)
-            => buffer.Add(value ? (byte)1 : (byte)0);
-
         public void WriteByte(byte value)
             => buffer.Add(value);
 
+        public void WriteBool(bool value)
+            => WriteByte(value ? (byte)1 : (byte)0);
+
         public void WriteSByte(sbyte value)
-            => buffer.Add((byte)value);
+            => WriteByte((byte)value);
 
         public void WriteBytes(IEnumerable<byte> bytes)
         {
@@ -89,78 +92,78 @@ namespace Networking.Data
 
         public void WriteShort(short value)
         {
-            buffer.Add((byte)value);
-            buffer.Add((byte)(value >> 8));
+            WriteByte((byte)value);
+            WriteByte((byte)(value >> 8));
         }
 
         public void WriteUShort(ushort value)
         {
-            buffer.Add((byte)value);
-            buffer.Add((byte)(value >> 8));
+            WriteByte((byte)value);
+            WriteByte((byte)(value >> 8));
         }
 
         public void WriteInt(int value)
         {
-            buffer.Add((byte)value);
-            buffer.Add((byte)(value >> 8));
-            buffer.Add((byte)(value >> 16));
-            buffer.Add((byte)(value >> 24));
+            WriteByte((byte)value);
+            WriteByte((byte)(value >> 8));
+            WriteByte((byte)(value >> 16));
+            WriteByte((byte)(value >> 24));
         }
 
         public void WriteUInt(uint value)
         {
-            buffer.Add((byte)value);
-            buffer.Add((byte)(value >> 8));
-            buffer.Add((byte)(value >> 16));
-            buffer.Add((byte)(value >> 24));
+            WriteByte((byte)value);
+            WriteByte((byte)(value >> 8));
+            WriteByte((byte)(value >> 16));
+            WriteByte((byte)(value >> 24));
         }
 
         public void WriteLong(long value)
         {
-            buffer.Add((byte)value);
-            buffer.Add((byte)(value >> 8));
-            buffer.Add((byte)(value >> 16));
-            buffer.Add((byte)(value >> 24));
-            buffer.Add((byte)(value >> 32));
-            buffer.Add((byte)(value >> 40));
-            buffer.Add((byte)(value >> 48));
-            buffer.Add((byte)(value >> 56));
+            WriteByte((byte)value);
+            WriteByte((byte)(value >> 8));
+            WriteByte((byte)(value >> 16));
+            WriteByte((byte)(value >> 24));
+            WriteByte((byte)(value >> 32));
+            WriteByte((byte)(value >> 40));
+            WriteByte((byte)(value >> 48));
+            WriteByte((byte)(value >> 56));
         }
 
         public void WriteULong(ulong value)
         {
-            buffer.Add((byte)value);
-            buffer.Add((byte)(value >> 8));
-            buffer.Add((byte)(value >> 16));
-            buffer.Add((byte)(value >> 24));
-            buffer.Add((byte)(value >> 32));
-            buffer.Add((byte)(value >> 40));
-            buffer.Add((byte)(value >> 48));
-            buffer.Add((byte)(value >> 56));
+            WriteByte((byte)value);
+            WriteByte((byte)(value >> 8));
+            WriteByte((byte)(value >> 16));
+            WriteByte((byte)(value >> 24));
+            WriteByte((byte)(value >> 32));
+            WriteByte((byte)(value >> 40));
+            WriteByte((byte)(value >> 48));
+            WriteByte((byte)(value >> 56));
         }
 
         public unsafe void WriteFloat(float value)
         {
             var tmpValue = *(uint*)&value;
 
-            buffer.Add((byte)tmpValue);
-            buffer.Add((byte)(tmpValue >> 8));
-            buffer.Add((byte)(tmpValue >> 16));
-            buffer.Add((byte)(tmpValue >> 24));
+            WriteByte((byte)tmpValue);
+            WriteByte((byte)(tmpValue >> 8));
+            WriteByte((byte)(tmpValue >> 16));
+            WriteByte((byte)(tmpValue >> 24));
         }
 
         public unsafe void WriteDouble(double value)
         {
             var tmpValue = *(ulong*)&value;
 
-            buffer.Add((byte)tmpValue);
-            buffer.Add((byte)(tmpValue >> 8));
-            buffer.Add((byte)(tmpValue >> 16));
-            buffer.Add((byte)(tmpValue >> 24));
-            buffer.Add((byte)(tmpValue >> 32));
-            buffer.Add((byte)(tmpValue >> 40));
-            buffer.Add((byte)(tmpValue >> 48));
-            buffer.Add((byte)(tmpValue >> 56));
+            WriteByte((byte)tmpValue);
+            WriteByte((byte)(tmpValue >> 8));
+            WriteByte((byte)(tmpValue >> 16));
+            WriteByte((byte)(tmpValue >> 24));
+            WriteByte((byte)(tmpValue >> 32));
+            WriteByte((byte)(tmpValue >> 40));
+            WriteByte((byte)(tmpValue >> 48));
+            WriteByte((byte)(tmpValue >> 56));
         }
 
         public void WriteChar(char value)
@@ -194,11 +197,11 @@ namespace Networking.Data
 
             while (tempValue > 0x80)
             {
-                buffer.Add((byte)(tempValue | 0x80));
+                WriteByte((byte)(tempValue | 0x80));
                 tempValue >>= 7;
             }
 
-            buffer.Add((byte)tempValue);
+            WriteByte((byte)tempValue);
         }
 
         public void WriteType(Type type)
@@ -210,15 +213,7 @@ namespace Networking.Data
             => WriteLong(span.Ticks);
 
         public void WriteDate(DateTime date)
-        {
-            WriteShort((short)date.Year);
-
-            WriteByte((byte)date.Month);
-            WriteByte((byte)date.Day);
-            WriteByte((byte)date.Hour);
-            WriteByte((byte)date.Second);
-            WriteByte((byte)date.Millisecond);
-        }
+            => WriteLong(date.Ticks);
 
         public void WriteVersion(Version version)
         {
@@ -242,8 +237,6 @@ namespace Networking.Data
             }
             else
             {
-
-
                 WriteBool(false);
                 WriteType(obj.GetType());
 
@@ -261,7 +254,7 @@ namespace Networking.Data
             }
         }
 
-        public void WriteAnonymousArray(object[] objects)
+        public void WriteAnonymousArray(params object[] objects)
         {
             WriteInt(objects.Length);
 
@@ -271,10 +264,10 @@ namespace Networking.Data
 
         public void Write<T>(T value)
         {
-            if (value != null && value is ISerialize serialize)
+            if (value != null && value is IMessage msg)
             {
                 WriteByte(0);
-                serialize.Serialize(this);
+                msg.Serialize(this);
                 return;
             }
 

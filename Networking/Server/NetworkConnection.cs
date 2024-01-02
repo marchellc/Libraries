@@ -15,11 +15,8 @@ namespace Networking.Server
 {
     public class NetworkConnection
     {
-        private DateTime handshakeSentAt;
-
         private Timer timer;
         private Timer ping;
-        private Timer handshakeTimer;
 
         private ConcurrentQueue<byte[]> inDataQueue;
         private ConcurrentQueue<byte[]> outDataQueue;
@@ -33,7 +30,6 @@ namespace Networking.Server
         public NetworkServer server;
 
         public bool isNoDelay = true;
-        public bool isAuthed;
 
         public int maxOutput = 10;
         public int maxInput = 10;
@@ -45,20 +41,19 @@ namespace Networking.Server
         public double avgLatency = 0;
 
         public NetworkConnectionStatus status = NetworkConnectionStatus.Disconnected;
-        public NetworkHandshakeResult handshake = NetworkHandshakeResult.TimedOut;
 
         public readonly int id;
         public readonly IPEndPoint remote;
 
-        public event Action OnAuthorized;
         public event Action OnPinged;
         public event Action<Type, object> OnMessage;
 
-        public NetworkConnection(int id, NetworkServer server)
+        public NetworkConnection(int id, NetworkServer server, bool isNoDelay)
         {
             this.id = id;
             this.server = server;
             this.remote = server.server.GetClientEndPoint(id);
+            this.isNoDelay = isNoDelay;
 
             this.log = new LogOutput($"Network Connection ({this.remote})");
             this.log.Setup();
@@ -69,8 +64,10 @@ namespace Networking.Server
             this.readers = new ReaderPool();
             this.readers.Initialize(20);
 
-            this.timer = new Timer(_ => UpdateDataQueue(), null, 100, 100);
-            this.ping = new Timer(_ => UpdatePing(), null, 100, 500);
+            this.inDataQueue = new ConcurrentQueue<byte[]>();
+            this.outDataQueue = new ConcurrentQueue<byte[]>();
+
+            this.features = new LockedDictionary<Type, NetworkFeature>();
 
             this.funcs = new NetworkFunctions(
                 () => { return writers.Next(); },
@@ -82,8 +79,14 @@ namespace Networking.Server
 
             this.status = NetworkConnectionStatus.Connected;
 
+            log.Info($"Connection initialized on {remote}!");
+
+            this.timer = new Timer(_ => UpdateDataQueue(), null, 0, 10);
+
             foreach (var type in server.requestFeatures)
             {
+                log.Debug($"Caching server feature: {type.FullName}");
+
                 var feature = type.Construct();
 
                 if (feature is null || feature is not NetworkFeature netFeature)
@@ -92,16 +95,26 @@ namespace Networking.Server
                 features[type] = netFeature;
 
                 netFeature.net = this.funcs;
+
+                log.Debug($"Cached server feature: {type.FullName}");
             }
 
-            Send(writer =>
-            {
-                writer.WriteVersion(NetworkServer.version);
-                writer.WriteDate(DateTime.Now.ToLocalTime());
-            });
+            this.ping = new Timer(_ => UpdatePing(), null, 0, 500);
 
-            this.handshakeSentAt = DateTime.Now;
-            this.handshakeTimer = new Timer(_ => UpdateHandshake(), null, 0, 200);
+            foreach (var feature in features.Values)
+            {
+                log.Debug($"Starting feature: {feature.GetType().FullName}");
+
+                try
+                {
+                    feature.InternalStart();
+                    feature.log!.Name += $" ({this.remote})";
+                }
+                catch (Exception ex)
+                {
+                    log.Error($"Failed to start feature '{feature.GetType().FullName}':\n{ex}");
+                }
+            }
         }
 
         public T Get<T>() where T : NetworkFeature
@@ -114,33 +127,31 @@ namespace Networking.Server
 
         public void Add<T>() where T : NetworkFeature
         {
-            if (isAuthed)
-            {
-                if (features.ContainsKey(typeof(T)))
-                    return;
+            if (features.ContainsKey(typeof(T)))
+                return;
 
-                var feature = Activator.CreateInstance<T>();
+            log.Debug($"Adding feature {typeof(T).FullName}");
 
-                if (feature is null)
-                    return;
+            var feature = Activator.CreateInstance<T>();
 
-                feature.net = funcs;
-                feature.InternalStart();
-                feature.log!.Name += $" ({this.remote})";
+            if (feature is null)
+                return;
 
-                features[typeof(T)] = feature;
-            }
+            feature.net = funcs;
+            feature.InternalStart();
+            feature.log!.Name += $" ({this.remote})";
+
+            features[typeof(T)] = feature;
+
+            log.Debug($"Added feature {typeof(T).FullName}");
         }
 
         public void Remove<T>() where T : NetworkFeature
         {
-            if (isAuthed)
-            {
-                if (features.TryGetValue(typeof(T), out var feature))
-                    feature.InternalStop();
+            if (features.TryGetValue(typeof(T), out var feature))
+                feature.InternalStop();
 
-                features.Remove(typeof(T));
-            }
+            features.Remove(typeof(T));
         }
 
         public void Send(Action<Writer> writerFunction)
@@ -153,9 +164,13 @@ namespace Networking.Server
         public void Send(Writer writer)
         {
             if (isNoDelay)
+            {
                 server.server.Send(id, writer.Buffer.ToSegment());
+            }
             else
+            {
                 inDataQueue.Enqueue(writer.Buffer);
+            }
 
             writer.Return();
         }
@@ -166,40 +181,35 @@ namespace Networking.Server
         internal void InternalReceive(byte[] data)
         {
             var reader = readers.Next(data);
+            var messages = reader.ReadAnonymousArray();
 
-            if (!isAuthed)
+            for (int i = 0; i < messages.Length; i++)
             {
-                handshake = (NetworkHandshakeResult)reader.ReadByte();
-                readers.Return(reader);
-                return;
-            }
-            else
-            {
-                var messages = reader.ReadToEnd();
-
-                for (int i = 0; i < messages.Count; i++)
+                if (messages[i] is NetworkPingMessage pingMsg)
                 {
-                    if (messages[i] is NetworkPingMessage pingMsg)
-                    {
-                        ProcessPing(pingMsg);
-                        continue;
-                    }
-
-                    OnMessage.Call(messages[i].GetType(), messages[i]);
-
-                    foreach (var feature in features.Values)
-                    {
-                        if (feature.isRunning && feature.HasListener(messages[i].GetType()))
-                        {
-                            feature.Receive(messages[i]);
-                            break;
-                        }
-                    }
+                    ProcessPing(pingMsg);
+                    continue;
                 }
 
-                readers.Return(reader);
-                return;
+                log.Debug($"Processing message: {messages[i].GetType().FullName}");
+
+                OnMessage.Call(messages[i].GetType(), messages[i]);
+
+                foreach (var feature in features.Values)
+                {
+                    log.Debug($"Validating message for feature '{feature.GetType().FullName}'");
+
+                    if (feature.isRunning && feature.HasListener(messages[i].GetType()))
+                    {
+                        log.Debug($"Feature contains a listener.");
+
+                        feature.Receive(messages[i]);
+                        break;
+                    }
+                }
             }
+
+            readers.Return(reader);
         }
 
         internal void Receive(byte[] data)
@@ -217,9 +227,6 @@ namespace Networking.Server
         {
             this.timer?.Dispose();
             this.timer = null;
-
-            this.handshakeTimer?.Dispose();
-            this.handshakeTimer = null;
 
             this.ping?.Dispose();
             this.ping = null;
@@ -251,12 +258,9 @@ namespace Networking.Server
             this.server = null;
 
             this.status = NetworkConnectionStatus.Disconnected;
-            this.handshake = NetworkHandshakeResult.TimedOut;
 
             this.log?.Dispose();
             this.log = null;
-
-            this.isAuthed = false;
         }
 
         private void ProcessPing(NetworkPingMessage pingMsg)
@@ -264,7 +268,7 @@ namespace Networking.Server
             if (pingMsg.isServer)
                 return;
 
-            latency = (pingMsg.recv - pingMsg.sent).TotalMilliseconds;
+            latency = ((pingMsg.recv - pingMsg.sent).TotalMilliseconds) / 10;
 
             if (latency > maxLatency)
                 maxLatency = latency;
@@ -277,55 +281,14 @@ namespace Networking.Server
             OnPinged.Call();
         }
 
-        private void UpdateHandshake()
-        {
-            if ((DateTime.Now - handshakeSentAt).TotalSeconds >= 15)
-            {
-                handshake = NetworkHandshakeResult.TimedOut;
-                return;
-            }
-
-            if (handshake != NetworkHandshakeResult.Confirmed)
-            {
-                Disconnect();
-                return;
-            }
-
-            isAuthed = true;
-
-            handshakeTimer.Dispose();
-            handshakeTimer = null;
-
-            foreach (var feature in features.Values)
-            {
-                feature.InternalStart();
-                feature.log!.Name += $" ({this.remote})";
-            }
-
-            OnAuthorized.Call();
-        }
-
         private void UpdatePing()
         {
-            Send(writer =>
-            {
-                writer.WriteByte(0);
-                writer.WriteDate(DateTime.Now);
-            });
-
+            Send(writer => writer.WriteAnonymousArray(new NetworkPingMessage(true, DateTime.Now, DateTime.MinValue)));
             OnPinged.Call();
         }
 
         private void UpdateDataQueue()
         {
-            if (isNoDelay)
-            {
-                timer?.Dispose();
-                timer = null;
-
-                return;
-            }
-
             var outProcessed = 0;
 
             while (outDataQueue.TryDequeue(out var outData) && outProcessed <= maxOutput)

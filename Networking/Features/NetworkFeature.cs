@@ -1,8 +1,6 @@
 ﻿using Common.Extensions;
 using Common.Logging;
 
-using Networking.Data;
-
 using System;
 using System.Collections.Generic;
 
@@ -17,11 +15,8 @@ namespace Networking.Features
         public LogOutput log;
         public NetworkFunctions net;
 
-        public virtual bool Receive(Reader reader) => false;
-
         public virtual void Start() { }
         public virtual void Stop() { }
-        public virtual void SetupLog(LogOutput log) { }
 
         public void Listen<TMessage>(Action<TMessage> listener)
             => listeners[typeof(TMessage)] = msg =>
@@ -37,13 +32,19 @@ namespace Networking.Features
             if (isRunning)
                 throw new InvalidOperationException($"This feature is already running");
 
-            isRunning = true;
+            try
+            {
+                isRunning = true;
 
-            log = new LogOutput(GetType().Name.SpaceByUpperCase());
+                log = new LogOutput(GetType().Name.SpaceByUpperCase()).Setup();
+                log.Info($"Calling feature start ..");
 
-            SetupLog(log);
-
-            Start();
+                Start();
+            }
+            catch (Exception ex)
+            {
+                log?.Error(ex);
+            }
         }
 
         internal void InternalStop()
@@ -53,7 +54,14 @@ namespace Networking.Features
 
             isRunning = false;
 
-            Stop();
+            try
+            {
+                Stop();
+            }
+            catch (Exception ex)
+            {
+                log?.Error(ex);
+            }
 
             log.Dispose();
             log = null;

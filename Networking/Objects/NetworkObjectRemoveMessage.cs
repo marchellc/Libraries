@@ -4,15 +4,15 @@ namespace Networking.Objects
 {
     public struct NetworkObjectRemoveMessage : IMessage
     {
-        public int objectId;
+        public ushort typeHash;
 
-        public NetworkObjectRemoveMessage(int objectId)
-            => this.objectId = objectId;
+        public NetworkObjectRemoveMessage(ushort typeHash)
+            => this.typeHash = typeHash;
 
         public void Deserialize(Reader reader)
-            => objectId = reader.ReadInt();
+            => typeHash = reader.ReadUShort();
 
         public void Serialize(Writer writer)
-            => writer.WriteInt(objectId);
+            => writer.WriteUShort(typeHash);
     }
 }

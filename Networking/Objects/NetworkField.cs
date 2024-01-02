@@ -12,28 +12,36 @@ namespace Networking.Objects
             set
             {
                 this.value = value;
-                pending.Add(new NetworkFieldUpdateMessage(value));
+                this.pending.Enqueue(new NetworkFieldUpdateMessage<T>(value));
             }
+        }
+
+        public override void Process(IMessage msg)
+        {
+            if (msg is not NetworkFieldUpdateMessage<T> updateMsg)
+                return;
+
+            value = updateMsg.value;
         }
     }
 
-    public struct NetworkFieldUpdateMessage : IMessage
+    public struct NetworkFieldUpdateMessage<T> : IMessage
     {
-        public object value;
+        public T value;
 
-        public NetworkFieldUpdateMessage(object value)
+        public NetworkFieldUpdateMessage(T value)
         {
             this.value = value;
         }
 
         public void Deserialize(Reader reader)
         {
-            value = reader.ReadAnonymous();
+            value = reader.Read<T>();
         }
 
         public void Serialize(Writer writer)
         {
-            writer.WriteAnonymous(value);
+            writer.Write<T>(value);
         }
     }
 }

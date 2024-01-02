@@ -3,6 +3,7 @@ using Common.IO.Collections;
 
 using Networking.Features;
 using Networking.Utilities;
+using Networking.Requests;
 
 using System;
 using System.Linq;
@@ -13,293 +14,284 @@ namespace Networking.Objects
 {
     public class NetworkManager : NetworkFeature
     {
-        public LockedDictionary<int, NetworkObject> objects;
+        public LockedDictionary<Type, NetworkObject> objects;
 
-        public LockedDictionary<short, Type> objectTypes;
-
+        public LockedDictionary<ushort, Type> netTypes;
         public LockedDictionary<ushort, PropertyInfo> netProperties;
         public LockedDictionary<ushort, FieldInfo> netFields;
         public LockedDictionary<ushort, MethodInfo> netMethods;
 
-        public int objectId;
-        public short objectTypeId;
-
         public override void Start()
         {
-            objects = new LockedDictionary<int, NetworkObject>();
-            objectTypes = new LockedDictionary<short, Type>();
-
-            netProperties = new LockedDictionary<ushort, PropertyInfo>();
-            netFields = new LockedDictionary<ushort, FieldInfo>();
-
-            objectId = 0;
-            objectTypeId = 0;
-
-            if (net.isServer)
+            try
             {
-                LoadAndSendTypes();
-                Listen<NetworkCmdMessage>(OnCmd);
+                objects = new LockedDictionary<Type, NetworkObject>();
+
+                netTypes = new LockedDictionary<ushort, Type>();
+                netProperties = new LockedDictionary<ushort, PropertyInfo>();
+                netFields = new LockedDictionary<ushort, FieldInfo>();
+                netMethods = new LockedDictionary<ushort, MethodInfo>();
+
+                LoadTypes();
+
+                if (net.isServer)
+                    Listen<NetworkCmdMessage>(OnCmd);
+                else
+                    Listen<NetworkRpcMessage>(OnRpc);
+
+                Listen<NetworkObjectAddMessage>(OnCreated);
+                Listen<NetworkObjectRemoveMessage>(OnDestroyed);
+                Listen<NetworkVariableSyncMessage>(OnVarSync);
+
+                log.Info($"Object networking initialized.");
             }
-            else
+            catch (Exception ex)
             {
-                Listen<NetworkObjectSyncMessage>(OnSync);
-                Listen<NetworkRpcMessage>(OnRpc);
+                log.Error(ex);
             }
-
-            Listen<NetworkObjectAddMessage>(OnCreated);
-            Listen<NetworkObjectRemoveMessage>(OnDestroyed);
-            Listen<NetworkVariableSyncMessage>(OnVarSync);
-
-            log.Info($"Object networking initialized.");
         }
 
         public override void Stop()
         {
-            Remove<NetworkObjectSyncMessage>();
-            Remove<NetworkObjectAddMessage>();
-            Remove<NetworkObjectRemoveMessage>();
-            Remove<NetworkVariableSyncMessage>();
-            Remove<NetworkRpcMessage>();
-            Remove<NetworkCmdMessage>();
-
             objects.Clear();
             objects = null;
 
-            objectTypes.Clear();
-            objectTypes = null;
+            netProperties.Clear();
+            netProperties = null;
 
-            objectId = 0;
-            objectTypeId = 0;
+            netFields.Clear();
+            netFields = null;
+
+            netMethods.Clear();
+            netMethods = null;
+
+            netTypes.Clear();
+            netTypes = null;
 
             log.Info($"Object networking unloaded.");
         }
 
         public T Instantiate<T>() where T : NetworkObject
         {
-            var netObjInstance = Instantiate(typeof(T));
+            if (objects.TryGetValue(typeof(T), out var netObject))
+                return (T)netObject;
 
-            if (netObjInstance is null)
-                throw new Exception($"Failed to instantiate type '{typeof(T).FullName}'");
+            var instance = typeof(T).Construct(this) as T;
 
-            if (netObjInstance is not T t)
-                throw new Exception($"Instantiated type cannot be cast to '{typeof(T).FullName}'");
+            objects[typeof(T)] = instance;
 
-            return t;
+            net.Send(new NetworkObjectAddMessage(typeof(T).GetTypeHash()));
+
+            instance.isDestroyed = false;
+            instance.isReady = true;
+
+            instance.StartInternal();
+            instance.OnStart();
+
+            return instance;
         }
 
-        public T Get<T>(int objectId)
+        public void Destroy<T>()
         {
-            if (!objects.TryGetValue(objectId, out var netObj))
-                throw new InvalidOperationException($"No network object with ID {objectId}");
-
-            if (netObj is not T t)
-                throw new InvalidOperationException($"Cannot cast object {netObj.GetType().FullName} to {typeof(T).FullName}");
-
-            return t;
-        }
-
-        public NetworkObject Get(int objectId)
-        {
-            if (!objects.TryGetValue(objectId, out var netObj))
-                throw new InvalidOperationException($"No network object with ID {objectId}");
-
-            return netObj;
-        }
-
-        public NetworkObject Instantiate(Type type)
-        {
-            if (objectTypes.Count <= 0)
-                throw new InvalidOperationException($"Types were not synchronized.");
-
-            if (!objectTypes.TryGetKey(type, out var typeId))
-                throw new InvalidOperationException($"Cannot instantiate a non network object type");
-
-            var netObj = type.Construct([objectId++, this]);
-
-            if (netObj is null || netObj is not NetworkObject netObjInstance)
-                throw new Exception($"Failed to instantiate type '{type.FullName}'");
-
-            netObjInstance.StartInternal();
-            netObjInstance.OnStart();
-
-            objects[netObjInstance.id] = netObjInstance;
-
-            net.Send(new NetworkObjectAddMessage(typeId));
-
-            netObjInstance.isReady = true;
-            netObjInstance.isDestroyed = false;
-
-            log.Trace($"Instantiated network type {type.FullName} at {netObjInstance.id}");
-
-            return netObjInstance;
-        }
-
-        public void Destroy(NetworkObject netObject)
-        {
-            if (netObject is null)
-                throw new ArgumentNullException(nameof(netObject));
-
-            if (netObject.id <= 0 || !objects.ContainsKey(netObject.id))
-                throw new InvalidOperationException($"This network object was not spawned by this manager.");
+            if (!objects.TryGetValue(typeof(T), out var netObject)
+                || !netTypes.TryGetKey(typeof(T), out var typeHash))
+                return;
 
             if (netObject.isDestroyed)
                 throw new InvalidOperationException($"Object is already destroyed");
 
-            netObject.OnStop();
-            netObject.StopInternal();
-
-            objects.Remove(netObject.id);
-
-            net.Send(new NetworkObjectRemoveMessage(netObject.id));
-
             netObject.isDestroyed = true;
             netObject.isReady = false;
 
-            log.Trace($"Destroyed network type {netObject.GetType().FullName} at {netObject.id}");
+            netObject.OnStop();
+            netObject.StopInternal();
+
+            objects.Remove(typeof(T));
+
+            net.Send(new NetworkObjectRemoveMessage(typeHash));
         }
 
         private void OnCmd(NetworkCmdMessage cmdMsg)
         {
             if (net.isClient)
+            {
+                log.Warn($"Received a CMD call request on the server.");
                 return;
-
-            if (!objects.TryGetValue(cmdMsg.objectId, out var netObj))
-                return;
+            }
 
             if (!netMethods.TryGetValue(cmdMsg.functionHash, out var netMethod))
+            {
+                log.Warn($"Received a CMD call for an unknown function: {cmdMsg.functionHash}");
                 return;
+            }
 
-            netMethod.Call(netObj, cmdMsg.args);
+            if (!netTypes.TryGetValue(cmdMsg.typeHash, out var type))
+            {
+                log.Warn($"Received a CMD message with an unknown type hash: {cmdMsg.typeHash}");
+                return;
+            }
+
+            if (!objects.TryGetValue(type, out var obj))
+            {
+                log.Warn($"Received a CMD message for type with no active instance ({type.FullName})");
+                return;
+            }
+
+            netMethod.Call(obj, cmdMsg.args);
+
+            log.Debug($"Called by CMD: {netMethod.ToName()} (with {cmdMsg.args?.Length ?? -1} args)");
         }
 
         private void OnRpc(NetworkRpcMessage rpcMsg)
         {
             if (net.isServer)
+            {
+                log.Warn($"Received a RPC call request on the server.");
                 return;
-
-            if (!objects.TryGetValue(rpcMsg.objectId, out var netObj))
-                return;
+            }
 
             if (!netMethods.TryGetValue(rpcMsg.functionHash, out var netMethod))
+            {
+                log.Warn($"Received a CMD call for an unknown function: {rpcMsg.functionHash}");
                 return;
+            }
 
-            netMethod.Call(netObj, rpcMsg.args);
+            if (!netTypes.TryGetValue(rpcMsg.typeHash, out var type))
+            {
+                log.Warn($"Received a RPC message with an unknown type hash: {rpcMsg.typeHash}");
+                return;
+            }
+
+            if (!objects.TryGetValue(type, out var obj) || obj.isDestroyed || !obj.isReady)
+            {
+                log.Warn($"Received a RPC message for type with no active instance ({type.FullName})");
+                return;
+            }
+
+            netMethod.Call(obj, rpcMsg.args);
+
+            log.Debug($"Called by RPC: {netMethod.ToName()} (with {rpcMsg.args?.Length ?? -1} args)");
         }
 
         private void OnVarSync(NetworkVariableSyncMessage syncMsg)
         {
-            if (!objects.TryGetValue(syncMsg.objectId, out var netObj))
+            if (!netTypes.TryGetValue(syncMsg.typeHash, out var type))
+            {
+                log.Warn($"Received a VAR_SYNC message with an unknown type hash: {syncMsg.typeHash}");
                 return;
+            }
 
-            netObj.ProcessVarSync(syncMsg);
+            if (!objects.TryGetValue(type, out var obj) || obj.isDestroyed || !obj.isReady)
+            {
+                log.Warn($"Received a VAR_SYNC message for type with no active instance ({type.FullName})");
+                return;
+            }
+
+            obj.ProcessVarSync(syncMsg);
         }
 
         private void OnDestroyed(NetworkObjectRemoveMessage destroyMsg)
         {
-            if (!objects.TryGetValue(destroyMsg.objectId, out var netObj))
-                return;
+            if (netTypes.TryGetValue(destroyMsg.typeHash, out var type))
+            {
+                if (objects.TryGetValue(type, out var obj))
+                {
+                    obj.isReady = false;
+                    obj.isDestroyed = true;
 
-            netObj.OnStop();
-            netObj.StopInternal();
+                    obj.OnStop();
+                    obj.StopInternal();
+                }
+                else
+                {
+                    log.Warn($"Received a DESTROY message for type '{type.FullName}', but there isn't any instance present.");
+                    return;
+                }
 
-            objects.Remove(destroyMsg.objectId);
-
-            netObj.isDestroyed = true;
-            netObj.isReady = false;
-
-            log.Trace($"Received DESTROY: {destroyMsg.objectId}");
+                objects.Remove(type);
+            }
+            else
+            {
+                log.Warn($"Received a DESTROY message with an unknown type hash: {destroyMsg.typeHash}");
+            }
         }
 
         private void OnCreated(NetworkObjectAddMessage addMsg)
         {
-            if (!objectTypes.TryGetValue(addMsg.typeId, out var type))
-                return;
-
-            var netObj = type.Construct([objectId++, this]);
-
-            if (netObj is null || netObj is not NetworkObject netObjInstance)
-                throw new Exception($"Failed to instantiate type '{type.FullName}'");
-
-            netObjInstance.StartInternal();
-            netObjInstance.OnStart();
-
-            objects[netObjInstance.id] = netObjInstance;
-
-            netObjInstance.isReady = true;
-            netObjInstance.isDestroyed = false;
-
-            log.Trace($"Received ADD: {addMsg.typeId} ({type.FullName})");
-        }
-
-        private void OnSync(NetworkObjectSyncMessage syncMsg)
-        {
-            if (net.isServer)
-                return;
-
-            if (syncMsg.syncTypes is null || syncMsg.syncTypes.Count <= 0)
-                return;
-
-            foreach (var syncType in syncMsg.syncTypes)
+            if (netTypes.TryGetValue(addMsg.typeHash, out var type))
             {
-                objectTypes[syncType.Key] = syncType.Value;
-
-                foreach (var property in syncType.Value.GetAllProperties())
+                if (objects.TryGetValue(type, out _))
                 {
-                    if (property.Name.StartsWith("Network") && property.GetMethod != null && property.SetMethod != null
-                        && !property.GetMethod.IsStatic && !property.SetMethod.IsStatic && TypeLoader.GetWriter(property.PropertyType) != null
-                        && TypeLoader.GetReader(property.PropertyType) != null)
-                        netProperties[property.GetPropertyHash()] = property;
+                    log.Warn($"Received an ADD message for type '{type.FullName}', but there is already an instance present. Keeping it.");
+                    return;
                 }
 
-                foreach (var field in syncType.Value.GetAllFields())
-                {
-                    if (!field.IsStatic && field.Name.StartsWith("network") && field.FieldType.InheritsType<NetworkVariable>() && !field.IsInitOnly)
-                        netFields[field.GetFieldHash()] = field;
-                }
+                var instance = type.Construct(this) as NetworkObject;
 
-                foreach (var method in syncType.Value.GetAllMethods())
-                {
-                    if (!method.IsStatic && (method.Name.StartsWith("Cmd") || method.Name.StartsWith("Rpc")) && method.ReturnType == typeof(void))
-                    {
-                        netMethods[method.GetMethodHash()] = method;
+                objects[type] = instance;
 
-                        var methodField = method.DeclaringType.Field($"{method.Name}Hash");
+                instance.isDestroyed = false;
+                instance.isReady = true;
 
-                        if (methodField != null && !methodField.IsInitOnly && methodField.IsStatic && methodField.FieldType == typeof(ushort))
-                            methodField.SetValueFast(method.GetMethodHash());
-                    }
-                }
+                instance.StartInternal();
+                instance.OnStart();
+            }
+            else
+            {
+                log.Warn($"Receive an ADD message with an unknown type hash: {addMsg.typeHash}");
             }
         }
 
-        private void LoadAndSendTypes()
+        private void LoadTypes()
         {
-            if (net.isClient)
-                throw new InvalidOperationException($"The client cannot send their types.");
-
-            if (objectTypes.Count > 0)
+            if (netTypes.Count > 0)
                 throw new InvalidOperationException($"Types have already been loaded");
 
-            foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+            try
             {
-                foreach (var type in assembly.GetTypes())
+                log.Debug($"Loading sync types ..");
+
+                var assemblies = new List<Assembly>(AppDomain.CurrentDomain.GetAssemblies());
+                var curAssembly = Assembly.GetExecutingAssembly();
+
+                if (!assemblies.Contains(curAssembly))
+                    assemblies.Add(curAssembly);
+
+                var types = new List<Type>();
+
+                foreach (var assembly in assemblies)
+                    types.AddRange(assembly.GetTypes());
+
+                if (!types.Contains(typeof(RequestManager)))
+                    types.Add(typeof(RequestManager));
+
+                foreach (var type in types)
                 {
-                    if (type.InheritsType<NetworkObject>() && type.GetAllConstructors().Any(c => c.Parameters().Length == 0 && !type.ContainsGenericParameters))
+                    if (type != typeof(NetworkObject) && type.IsSubclassOf(typeof(NetworkObject))
+                        && type.GetAllConstructors().Any(c => c.Parameters().Length == 1 && !type.ContainsGenericParameters))
                     {
-                        objectTypes[objectTypeId++] = type;
+                        netTypes[type.GetTypeHash()] = type;
+
+                        log.Debug($"Cached sync type: {type.FullName} ({type.GetTypeHash()})");
 
                         foreach (var property in type.GetAllProperties())
                         {
                             if (property.Name.StartsWith("Network") && property.GetMethod != null && property.SetMethod != null
                                 && !property.GetMethod.IsStatic && !property.SetMethod.IsStatic && TypeLoader.GetWriter(property.PropertyType) != null
                                 && TypeLoader.GetReader(property.PropertyType) != null)
+                            {
                                 netProperties[property.GetPropertyHash()] = property;
+                                log.Debug($"Cached network property: {property.ToName()} ({property.GetPropertyHash()})");
+                            }
                         }
 
                         foreach (var field in type.GetAllFields())
                         {
                             if (!field.IsStatic && field.Name.StartsWith("network") && field.FieldType.InheritsType<NetworkVariable>() && !field.IsInitOnly)
+                            {
                                 netFields[field.GetFieldHash()] = field;
+                                log.Debug($"Cached network field: {field.ToName()} ({field.GetFieldHash()})");
+                            }
                         }
 
                         foreach (var method in type.GetAllMethods())
@@ -308,17 +300,27 @@ namespace Networking.Objects
                             {
                                 netMethods[method.GetMethodHash()] = method;
 
-                                var methodField = method.DeclaringType.Field($"{method.Name}Hash");
+                                log.Debug($"Cached network method: {method.ToName()} ({method.GetMethodHash()})");
 
-                                if (methodField != null && !methodField.IsInitOnly && methodField.IsStatic && methodField.FieldType == typeof(ushort))
-                                    methodField.SetValueFast(method.GetMethodHash());
+                                var methodFieldName = $"{method.Name}Hash";
+
+                                foreach (var field in type.GetAllFields())
+                                {
+                                    if (field.Name != methodFieldName || field.FieldType != typeof(ushort) || !field.IsStatic || field.IsInitOnly)
+                                        continue;
+
+                                    field.SetValueFast(method.GetMethodHash());
+                                    log.Debug($"Set value to network method field {field.ToName()} ({method.GetMethodHash()})");
+                                }
                             }
                         }
                     }
                 }
             }
-
-            net.Send(new NetworkObjectSyncMessage(new Dictionary<short, Type>(objectTypes)));
+            catch (Exception ex)
+            {
+                log.Error(ex);
+            }
         }
     }
 }

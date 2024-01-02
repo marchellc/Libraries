@@ -1,4 +1,8 @@
 ﻿namespace Networking.Data
 {
-    public interface IMessage : ISerialize, IDeserialize { }
+    public interface IMessage
+    {
+        void Serialize(Writer writer);
+        void Deserialize(Reader reader);
+    }
 }

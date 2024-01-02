@@ -43,7 +43,7 @@ namespace Networking.Address
                         return false;
                     }
 
-                    info = new IPInfo(GetType(ipObj), ip, portNum, ipObj);
+                    info = new IPInfo(GetType(ipObj), portNum, ipObj);
                     return true;
                 }
                 else if (ip.ToLower() == "localhost")
@@ -57,7 +57,7 @@ namespace Networking.Address
                     return false;
                 }
 
-                info = new IPInfo(GetType(ipValue), ip, 0, ipValue);
+                info = new IPInfo(GetType(ipValue), 0, ipValue);
                 return true;
             }
             catch 

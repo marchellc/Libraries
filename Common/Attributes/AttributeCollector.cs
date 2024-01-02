@@ -12,19 +12,39 @@ namespace Common.Attributes
 {
     public static class AttributeCollector
     {
-        private static LogOutput log = new LogOutput("Attribute Manager").Setup();
+        private static readonly string[] blacklistedNamespaces = new string[]
+        {
+            "System.Security",
+            "System.Runtime",
+            "System.CompilerServices",
+            "System.InteropServices",
+        };
+
+        private static readonly Type[] blacklistedTypes = new Type[]
+        {
+            typeof(SerializableAttribute),
+            typeof(FlagsAttribute),
+            typeof(ObsoleteAttribute),
+            typeof(ThreadStaticAttribute),
+        };
+
+        private static LogOutput log;
         private static LockedList<AttributeCache> cachedAttributes = new LockedList<AttributeCache>();
         private static BindingFlags flags = BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static | BindingFlags.NonPublic;
 
         public static event Action<AttributeCache> OnAdded;
         public static event Action<AttributeCache> OnRemoved;
 
-        static AttributeCollector()
+        internal static void Init()
         {
+            log = new LogOutput("Attribute Manager").Setup();
+
             AppDomain.CurrentDomain.AssemblyLoad += OnAssembly;
 
             foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
                 Collect(assembly);
+
+            log.Info($"Initialized, cached {cachedAttributes.Count} attributes.");
         }
 
         public static IEnumerable<AttributeCache> Get<T>() where T : Attribute
@@ -78,52 +98,48 @@ namespace Common.Attributes
             if (cachedAttributes.Any(a => a.Member == member && TypeInstanceComparer.IsEqual(typeInstance, a.Instance)))
                 return;
 
-            var attributes = member.GetCustomAttributes(false);
+            if (member.DeclaringType is null || member.DeclaringType.Namespace is null)
+                return;
 
-            if (attributes.Length > 0)
+            if (member.DeclaringType.Namespace.StartsWith("System"))
+                return;
+
+            if (TypeInstanceValidator.IsValid(member.DeclaringType, typeInstance) != TypeInstanceValidator.ValidatorResult.Ok)
+                return;
+
+            var attributes = member.GetCustomAttributes<Attribute>();
+
+            foreach (var attribute in attributes)
             {
-                if (member.DeclaringType is null || member.DeclaringType.Namespace is null)
-                    return;
+                var type = attribute.GetType();
 
-                if (member.DeclaringType.Namespace.StartsWith("System"))
-                    return;
+                if (blacklistedTypes.Contains(type) || blacklistedNamespaces.Any(type.FullName.StartsWith))
+                    continue;
 
-                if (TypeInstanceValidator.IsValid(member.DeclaringType, typeInstance) != TypeInstanceValidator.ValidatorResult.Ok)
-                    return;
+                var usage = type.GetCustomAttribute<AttributeUsageAttribute>();
 
-                for (int i = 0; i < attributes.Length; i++)
+                if (usage is null)
+                    continue;
+
+                var cached = new AttributeCache
                 {
-                    var attributeObj = attributes[i];
+                    Assembly = member.DeclaringType.Assembly,
+                    Attribute = attribute,
+                    Instance = typeInstance,
+                    Member = member,
+                    Target = usage.ValidOn,
+                    Type = member.DeclaringType,
+                    Usage = usage
+                };
 
-                    if (attributeObj is null || attributeObj is not Attribute attribute)
-                        continue;
+                cachedAttributes.Add(cached);
 
-                    var type = attribute.GetType();
-                    var usage = type.GetCustomAttribute<AttributeUsageAttribute>();
+                OnAdded.Call(cached);
 
-                    if (usage is null)
-                        continue;
-
-                    var cached = new AttributeCache
-                    {
-                        Assembly = member.DeclaringType.Assembly,
-                        Attribute = attribute,
-                        Instance = typeInstance,
-                        Member = member,
-                        Target = usage.ValidOn,
-                        Type = member.DeclaringType,
-                        Usage = usage
-                    };
-
-                    cachedAttributes.Add(cached);
-
-                    OnAdded.Call(cached);
-
-                    if (attribute is AttributeResolver resolver)
-                    {
-                        resolver.Cache = cached;
-                        resolver.OnResolved();
-                    }
+                if (attribute is AttributeResolver resolver)
+                {
+                    resolver.Cache = cached;
+                    resolver.OnResolved();
                 }
             }
         }
@@ -180,7 +196,9 @@ namespace Common.Attributes
         private static void OnAssembly(object _, AssemblyLoadEventArgs ev)
         {
             if (ev.LoadedAssembly != null)
-                Collect(ev.LoadedAssembly);
+            {
+                CodeUtils.OnThread(() => Collect(ev.LoadedAssembly));
+            }
         }
     }
 }

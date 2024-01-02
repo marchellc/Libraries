@@ -1,11 +1,17 @@
-﻿using System;
+﻿using Common.Utilities;
+
+using System;
+using System.Collections.Concurrent;
 
 namespace Common.Logging.Console
 {
     public class ConsoleLogger : ILogger
     {
+        public static readonly ConsoleLogger Instance = new ConsoleLogger();
+
         private LogMessage lastMsg;
-        private static bool isBusy;
+        private ConcurrentQueue<LogMessage> messages;
+        private object queueLock;
 
         public LogMessage Latest => lastMsg;
 
@@ -14,15 +20,21 @@ namespace Common.Logging.Console
         public ConsoleLogger()
         {
             Started = DateTime.Now;
+
+            queueLock = new object();
+            messages = new ConcurrentQueue<LogMessage>();
+
+            CodeUtils.WhileTrue(() => true, UpdateQueue, 50);
         }
 
         public void Emit(LogMessage message)
         {
-            while (isBusy)
-                continue;
+            lock (queueLock)
+                messages.Enqueue(message);
+        }
 
-            isBusy = true;
-
+        private void Show(LogMessage message)
+        {
             lastMsg = message;
 
             try
@@ -42,8 +54,15 @@ namespace Common.Logging.Console
                 System.Console.WriteLine();
             }
             catch { }
+        }
 
-            isBusy = false;
+        private void UpdateQueue()
+        {
+            lock (queueLock)
+            {
+                while (messages.TryDequeue(out var message))
+                    Show(message);
+            }
         }
 
         private static void WriteArray(LogCharacter[] array)

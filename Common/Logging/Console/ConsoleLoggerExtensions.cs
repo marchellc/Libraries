@@ -5,7 +5,7 @@
         public static LogOutput AddConsoleIfPresent(this LogOutput output)
         {
             if (LogUtils.IsConsoleAvailable)
-                output.AddLogger<ConsoleLogger>();
+                output.AddLogger(ConsoleLogger.Instance);
 
             return output;
         }

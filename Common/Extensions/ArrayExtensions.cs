@@ -9,6 +9,29 @@ namespace Common.Extensions
         public static TValue[] CastArray<TValue>(this IEnumerable objects)
             => objects.Cast<TValue>().ToArray();
 
+        public static bool TryPeekIndex<T>(this T[] array, int index, out T value)
+        {
+            if (index >= array.Length)
+            {
+                value = default;
+                return false;
+            }
+
+            value = array[index];
+            return true;
+        }
+
+        public static int FindIndex<T>(this T[] array, Func<T, bool> predicate)
+        {
+            for (int i = 0; i < array.Length; i++)
+            {
+                if (predicate(array[i]))
+                    return i;
+            }
+
+            return -1;
+        }
+
         public static void Add<TValue>(ref TValue[] array, TValue value)
         {
             if (array is null)
