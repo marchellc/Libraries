@@ -103,6 +103,8 @@ namespace Networking.Client
                 netData => { return readers.Next(netData); },
                 netWriter => { Send(netWriter); },
 
+                Disconnect,
+
                 true);
         }
 

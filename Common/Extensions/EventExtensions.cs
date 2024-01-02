@@ -146,16 +146,24 @@ namespace Common.Extensions
             }
         }
 
-        public static void VerifyEventType(this Type type)
+        public static void Raise(this EventInfo ev, object instance, params object[] args)
         {
-            if (type is null)
-                throw new ArgumentNullException(nameof(type));
+            if (ev is null)
+                throw new ArgumentNullException(nameof(ev));
 
-            if (type == typeof(EventInfo))
-                throw new ArgumentException($"Argument 'type' has to be a class inheriting from EventInfo, not the EventInfo class itself.");
+            var raiseMethod = ev.GetRaiseMethod(true);
 
-            if (!type.InheritsType<EventInfo>())
-                throw new ArgumentException($"Argument 'type' has to be a class inheriting from EventInfo.");
+            if (raiseMethod is null)
+                return;
+
+            try
+            {
+                raiseMethod.Call(instance, args);
+            }
+            catch (Exception ex)
+            {
+                Log.Error($"Failed to raise event handler '{ev.ToName()}':\n{ex}");
+            }
         }
     }
 }

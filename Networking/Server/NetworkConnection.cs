@@ -75,6 +75,8 @@ namespace Networking.Server
                 netData => { return readers.Next(netData); },
                 netWriter => { Send(netWriter); },
 
+                () => server.server.Disconnect(id),
+
                 false);
 
             this.status = NetworkConnectionStatus.Connected;

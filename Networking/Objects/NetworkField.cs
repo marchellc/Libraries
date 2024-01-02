@@ -1,4 +1,8 @@
-﻿using Networking.Data;
+﻿using Common.Extensions;
+
+using Networking.Data;
+
+using System;
 
 namespace Networking.Objects
 {
@@ -6,13 +10,27 @@ namespace Networking.Objects
     {
         private T value;
 
+        public event Action<T, T> OnChanged;
+
         public T Value
         {
             get => value;
             set
             {
-                this.value = value;
-                this.pending.Enqueue(new NetworkFieldUpdateMessage<T>(value));
+                if (this.value is null || value is null)
+                    return;
+
+                if (this.value is null && value != null
+                    || (this.value != null && value is null)
+                    || (!this.value.Equals(value)))
+                {
+                    var curValue = this.value;
+
+                    this.value = value;
+                    this.pending.Enqueue(new NetworkFieldUpdateMessage<T>(value));
+
+                    OnChanged.Call(curValue, this.value);
+                }
             }
         }
 
@@ -21,7 +39,10 @@ namespace Networking.Objects
             if (msg is not NetworkFieldUpdateMessage<T> updateMsg)
                 return;
 
+            var prevValue = value;
             value = updateMsg.value;
+
+            OnChanged.Call(prevValue, value);
         }
     }
 

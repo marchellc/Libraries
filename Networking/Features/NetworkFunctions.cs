@@ -11,7 +11,9 @@ namespace Networking.Features
     {
         private Func<Writer> getWriter;
         private Func<byte[], Reader> getReader;
+
         private Action<Writer> sendWriter;
+        private Action disconnect;
 
         public bool isClient;
         public bool isServer;
@@ -21,6 +23,7 @@ namespace Networking.Features
             Func<byte[], Reader> getReader, 
             
             Action<Writer> sendWriter,
+            Action disconnect,
             
             bool isClient)
         {
@@ -36,9 +39,13 @@ namespace Networking.Features
             this.getWriter = getWriter;
             this.getReader = getReader;
             this.sendWriter = sendWriter;
+            this.disconnect = disconnect;
             this.isClient = isClient;
             this.isServer = !isClient;
         }
+
+        public void Disconnect()
+            => disconnect();
 
         public Writer GetWriter()
             => getWriter();

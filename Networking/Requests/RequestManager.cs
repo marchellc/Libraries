@@ -7,6 +7,7 @@ using Networking.Objects;
 
 using System;
 using System.Reflection;
+using System.Threading.Tasks;
 
 namespace Networking.Requests
 {
@@ -71,6 +72,25 @@ namespace Networking.Requests
                 CallRpcGetResponse(requestInfo);
             else
                 CallCmdGetResponse(requestInfo);
+        }
+
+        public async Task<AsyncResponseInfo<T>> RequestAsync<T>(object request)
+        {
+            var responseInfo = default(ResponseInfo);
+            var responseValue = default(T);
+            var responseReceived = false;
+
+            Request<T>(request, (res, val) =>
+            {
+                responseInfo = res;
+                responseValue = val;
+                responseReceived = true;
+            });
+
+            while (!responseReceived || responseInfo is null)
+                await Task.Delay(20);
+
+            return new AsyncResponseInfo<T>(responseInfo, responseValue);
         }
 
         public void Respond(RequestInfo request, object response, bool isSuccess)

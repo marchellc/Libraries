@@ -40,6 +40,14 @@ namespace Networking.Objects
         public void SendCmd(ushort functionHash, params object[] args)
             => net.Send(new NetworkCmdMessage(typeHash, functionHash, args));
 
+        public void SendEvent(ushort eventHash, bool shouldExecute, params object[] args)
+        {
+            if (shouldExecute && manager.netEvents.TryGetValue(eventHash, out var ev))
+                ev.Raise(this, args);
+
+            net.Send(new NetworkRaiseEventMessage(typeHash, eventHash, args));
+        }
+
         internal void StartInternal()
         {
             foreach (var fieldPair in manager.netFields)

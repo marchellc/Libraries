@@ -3,7 +3,6 @@ using Common.IO.Collections;
 
 using Networking.Features;
 using Networking.Utilities;
-using Networking.Requests;
 
 using System;
 using System.Linq;
@@ -20,6 +19,7 @@ namespace Networking.Objects
         public LockedDictionary<ushort, PropertyInfo> netProperties;
         public LockedDictionary<ushort, FieldInfo> netFields;
         public LockedDictionary<ushort, MethodInfo> netMethods;
+        public LockedDictionary<ushort, EventInfo> netEvents;
 
         public override void Start()
         {
@@ -31,6 +31,7 @@ namespace Networking.Objects
                 netProperties = new LockedDictionary<ushort, PropertyInfo>();
                 netFields = new LockedDictionary<ushort, FieldInfo>();
                 netMethods = new LockedDictionary<ushort, MethodInfo>();
+                netEvents = new LockedDictionary<ushort, EventInfo>();
 
                 LoadTypes();
 
@@ -42,6 +43,7 @@ namespace Networking.Objects
                 Listen<NetworkObjectAddMessage>(OnCreated);
                 Listen<NetworkObjectRemoveMessage>(OnDestroyed);
                 Listen<NetworkVariableSyncMessage>(OnVarSync);
+                Listen<NetworkRaiseEventMessage>(OnRaise);
 
                 log.Info($"Object networking initialized.");
             }
@@ -67,6 +69,9 @@ namespace Networking.Objects
 
             netTypes.Clear();
             netTypes = null;
+
+            netEvents.Clear();
+            netEvents = null;
 
             log.Info($"Object networking unloaded.");
         }
@@ -111,11 +116,36 @@ namespace Networking.Objects
             net.Send(new NetworkObjectRemoveMessage(typeHash));
         }
 
+        private void OnRaise(NetworkRaiseEventMessage raiseMsg)
+        {
+            if (!netEvents.TryGetValue(raiseMsg.eventHash, out var ev))
+            {
+                log.Warn($"Received a RAISE call for an unknown event: {raiseMsg.eventHash}");
+                return;
+            }
+
+            if (!netTypes.TryGetValue(raiseMsg.typeHash, out var type))
+            {
+                log.Warn($"Received a RAISE call for an unknown type: {raiseMsg.typeHash}");
+                return;
+            }
+
+            if (!objects.TryGetValue(type, out var obj))
+            {
+                log.Warn($"Received a RAISE call for type '{type.FullName}' with a missing instance.");
+                return;
+            }
+
+            ev.Raise(obj, raiseMsg.args);
+
+            log.Debug($"Raised event '{ev.ToName()}'");
+        }
+
         private void OnCmd(NetworkCmdMessage cmdMsg)
         {
             if (net.isClient)
             {
-                log.Warn($"Received a CMD call request on the server.");
+                log.Warn($"Received a CMD call request on the client.");
                 return;
             }
 
@@ -249,7 +279,7 @@ namespace Networking.Objects
 
             try
             {
-                log.Debug($"Loading sync types ..");
+                log.Debug($"Loading types ..");
 
                 var assemblies = new List<Assembly>(AppDomain.CurrentDomain.GetAssemblies());
                 var curAssembly = Assembly.GetExecutingAssembly();
@@ -262,9 +292,6 @@ namespace Networking.Objects
                 foreach (var assembly in assemblies)
                     types.AddRange(assembly.GetTypes());
 
-                if (!types.Contains(typeof(RequestManager)))
-                    types.Add(typeof(RequestManager));
-
                 foreach (var type in types)
                 {
                     if (type != typeof(NetworkObject) && type.IsSubclassOf(typeof(NetworkObject))
@@ -272,12 +299,12 @@ namespace Networking.Objects
                     {
                         netTypes[type.GetTypeHash()] = type;
 
-                        log.Debug($"Cached sync type: {type.FullName} ({type.GetTypeHash()})");
+                        log.Debug($"Cached type: {type.FullName} ({type.GetTypeHash()})");
 
                         foreach (var property in type.GetAllProperties())
                         {
-                            if (property.Name.StartsWith("Network") && property.GetMethod != null && property.SetMethod != null
-                                && !property.GetMethod.IsStatic && !property.SetMethod.IsStatic && TypeLoader.GetWriter(property.PropertyType) != null
+                            if (property.Name.StartsWith("Network") && property.GetGetMethod(true) != null && property.GetSetMethod(true) != null
+                                && !property.GetGetMethod(true).IsStatic && !property.GetSetMethod(true).IsStatic && TypeLoader.GetWriter(property.PropertyType) != null
                                 && TypeLoader.GetReader(property.PropertyType) != null)
                             {
                                 netProperties[property.GetPropertyHash()] = property;
@@ -314,12 +341,34 @@ namespace Networking.Objects
                                 }
                             }
                         }
+
+                        foreach (var ev in type.GetAllEvents())
+                        {
+                            if (ev.GetRaiseMethod(true) != null && ev.Name.StartsWith("Network"))
+                            {
+                                netEvents[ev.GetEventHash()] = ev;
+
+                                log.Debug($"Cached network event: {ev.ToName()} ({ev.GetEventHash()})");
+
+                                var eventFieldName = $"{ev.Name}Hash";
+
+                                foreach (var field in type.GetAllFields())
+                                {
+                                    if (field.Name != eventFieldName || field.FieldType != typeof(ushort) || !field.IsStatic || field.IsInitOnly)
+                                        continue;
+
+                                    field.SetValueFast(ev.GetEventHash());
+                                    log.Debug($"Set value to network event field {field.ToName()} ({ev.GetEventHash()})");
+                                }
+                            }
+                        }
                     }
                 }
             }
             catch (Exception ex)
             {
-                log.Error(ex);
+                log.Error($"Failed to load network types, disconnecting!\n{ex}");
+                net.Disconnect();
             }
         }
     }

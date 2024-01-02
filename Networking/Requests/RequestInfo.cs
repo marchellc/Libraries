@@ -21,6 +21,20 @@ namespace Networking.Requests
         public bool isResponded;
         public bool isTimedOut;
 
+        public void Respond(object response, bool isSuccess)
+        {
+            if (isResponded)
+                return;
+
+            this.manager.Respond(this, response, isSuccess);
+        }
+
+        public void Success(object response)
+            => Respond(response, true);
+
+        public void Fail(object response = null)
+            => Respond(response, false);
+
         public void Deserialize(Reader reader)
         {
             id = reader.ReadCleanString();

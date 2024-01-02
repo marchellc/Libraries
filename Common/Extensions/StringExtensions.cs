@@ -200,6 +200,9 @@ namespace Common.Extensions
             return StringBuilderPool.Shared.StringReturn(builder);
         }
 
+        public static ushort GetStableHash(this string str)
+            => (ushort)(str.GetStableHashCode() & 0xFFFF);
+
         public static int GetStableHashCode(this string str)
         {
             var seed = 23;
