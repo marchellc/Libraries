@@ -1,5 +1,6 @@
 ﻿using Common.Extensions;
 using Common.IO.Collections;
+using Common.Utilities;
 
 using Networking.Features;
 using Networking.Utilities;
@@ -15,11 +16,18 @@ namespace Networking.Objects
     {
         public LockedDictionary<Type, NetworkObject> objects;
 
+        public LockedDictionary<Type, Action<NetworkObject>> creationListeners;
+        public LockedDictionary<Type, Action<NetworkObject>> destroyListeners;
+
         public LockedDictionary<ushort, Type> netTypes;
         public LockedDictionary<ushort, PropertyInfo> netProperties;
         public LockedDictionary<ushort, FieldInfo> netFields;
         public LockedDictionary<ushort, MethodInfo> netMethods;
         public LockedDictionary<ushort, EventInfo> netEvents;
+
+        public LockedDictionary<string, ushort> netHashes;
+
+        public event Action OnInitialized;
 
         public override void Start()
         {
@@ -27,11 +35,15 @@ namespace Networking.Objects
             {
                 objects = new LockedDictionary<Type, NetworkObject>();
 
+                creationListeners = new LockedDictionary<Type, Action<NetworkObject>>();
+                destroyListeners = new LockedDictionary<Type, Action<NetworkObject>>();
+
                 netTypes = new LockedDictionary<ushort, Type>();
                 netProperties = new LockedDictionary<ushort, PropertyInfo>();
                 netFields = new LockedDictionary<ushort, FieldInfo>();
                 netMethods = new LockedDictionary<ushort, MethodInfo>();
                 netEvents = new LockedDictionary<ushort, EventInfo>();
+                netHashes = new LockedDictionary<string, ushort>();
 
                 LoadTypes();
 
@@ -40,6 +52,7 @@ namespace Networking.Objects
                 else
                     Listen<NetworkRpcMessage>(OnRpc);
 
+                Listen<NetworkHashSyncMessage>(OnHashSync);
                 Listen<NetworkObjectAddMessage>(OnCreated);
                 Listen<NetworkObjectRemoveMessage>(OnDestroyed);
                 Listen<NetworkVariableSyncMessage>(OnVarSync);
@@ -58,6 +71,12 @@ namespace Networking.Objects
             objects.Clear();
             objects = null;
 
+            creationListeners.Clear();
+            creationListeners = null;
+
+            destroyListeners.Clear();
+            destroyListeners = null;
+
             netProperties.Clear();
             netProperties = null;
 
@@ -73,10 +92,37 @@ namespace Networking.Objects
             netEvents.Clear();
             netEvents = null;
 
+            netHashes.Clear();
+            netHashes = null;
+
             log.Info($"Object networking unloaded.");
         }
 
-        public T Instantiate<T>() where T : NetworkObject
+        public void ListenCreate<T>(Action<T> listener) where T : NetworkObject
+            => creationListeners[typeof(T)] = obj =>
+            {
+                if (obj is null || obj is not T tObj)
+                    return;
+
+                listener.Call(tObj);
+            };
+
+        public void ListenDestroy<T>(Action<T> listener) where T : NetworkObject
+            => destroyListeners[typeof(T)] = obj =>
+            {
+                if (obj is null || obj is not T tObj)
+                    return;
+
+                listener.Call(tObj);
+            };
+
+        public void StopListenCreate<T>()
+            => creationListeners.Remove(typeof(T));
+
+        public void StopListenDestroy<T>()
+            => destroyListeners.Remove(typeof(T));
+
+        public T Get<T>() where T : NetworkObject
         {
             if (objects.TryGetValue(typeof(T), out var netObject))
                 return (T)netObject;
@@ -92,6 +138,9 @@ namespace Networking.Objects
 
             instance.StartInternal();
             instance.OnStart();
+
+            if (creationListeners.TryGetValue(typeof(T), out var listener))
+                listener.Call(instance);
 
             return instance;
         }
@@ -114,6 +163,9 @@ namespace Networking.Objects
             objects.Remove(typeof(T));
 
             net.Send(new NetworkObjectRemoveMessage(typeHash));
+
+            if (destroyListeners.TryGetValue(typeof(T), out var listener))
+                listener.Call(netObject);
         }
 
         private void OnRaise(NetworkRaiseEventMessage raiseMsg)
@@ -231,6 +283,9 @@ namespace Networking.Objects
 
                     obj.OnStop();
                     obj.StopInternal();
+
+                    if (destroyListeners.TryGetValue(type, out var listener))
+                        listener.Call(obj);
                 }
                 else
                 {
@@ -265,6 +320,9 @@ namespace Networking.Objects
 
                 instance.StartInternal();
                 instance.OnStart();
+
+                if (creationListeners.TryGetValue(type, out var listener))
+                    listener.Call(instance);
             }
             else
             {
@@ -272,14 +330,63 @@ namespace Networking.Objects
             }
         }
 
+        private void OnHashSync(NetworkHashSyncMessage syncMsg)
+        {
+            log.Info($"Received a hash sync message with {syncMsg.hashes.Count} hashes.");
+
+            foreach (var hash in syncMsg.hashes)
+            {
+                if (netMethods.ContainsKey(hash.Value)
+                    || netEvents.ContainsKey(hash.Value)
+                    || netProperties.ContainsKey(hash.Value)
+                    || netFields.ContainsKey(hash.Value))
+                {
+                    log.Verbose($"Hash '{hash.Key}'={hash.Value} is already known to this client, skipping ..");
+                    continue;
+                }
+
+                log.Info($"Received an unknown hash: '{hash.Key}'={hash.Value}");
+
+                var split = hash.Key.Split('.');
+
+                if (split.Length != 2)
+                    continue;
+
+                log.Verbose($"Split: type={split[0]} field={split[1]}");
+
+                foreach (var type in netTypes)
+                {
+                    if (type.Value.Name != split[0])
+                        continue;
+
+                    log.Verbose($"Type '{type.Value.FullName}' should contain field '{split[1]}'");
+
+                    try
+                    {
+                        var field = type.Value.Field(split[1]);
+
+                        if (field is null)
+                            continue;
+
+                        field.SetValueFast(hash.Value);
+
+                        log.Verbose($"Field '{field.ToName()}' value set to {hash.Value}");
+                    }
+                    catch (Exception ex)
+                    {
+                        log.Error(ex);
+                    }
+                }
+            }
+
+            log.Info($"Synchronized {syncMsg.hashes.Count} hashes.");
+        }
+
         private void LoadTypes()
         {
-            if (netTypes.Count > 0)
-                throw new InvalidOperationException($"Types have already been loaded");
-
             try
             {
-                log.Debug($"Loading types ..");
+                netTypes.Clear();
 
                 var assemblies = new List<Assembly>(AppDomain.CurrentDomain.GetAssemblies());
                 var curAssembly = Assembly.GetExecutingAssembly();
@@ -299,8 +406,6 @@ namespace Networking.Objects
                     {
                         netTypes[type.GetTypeHash()] = type;
 
-                        log.Debug($"Cached type: {type.FullName} ({type.GetTypeHash()})");
-
                         foreach (var property in type.GetAllProperties())
                         {
                             if (property.Name.StartsWith("Network") && property.GetGetMethod(true) != null && property.GetSetMethod(true) != null
@@ -308,7 +413,7 @@ namespace Networking.Objects
                                 && TypeLoader.GetReader(property.PropertyType) != null)
                             {
                                 netProperties[property.GetPropertyHash()] = property;
-                                log.Debug($"Cached network property: {property.ToName()} ({property.GetPropertyHash()})");
+                                netHashes[$"{property.DeclaringType.Name}.{property.Name}Hash"] = property.GetPropertyHash();
                             }
                         }
 
@@ -317,7 +422,7 @@ namespace Networking.Objects
                             if (!field.IsStatic && field.Name.StartsWith("network") && field.FieldType.InheritsType<NetworkVariable>() && !field.IsInitOnly)
                             {
                                 netFields[field.GetFieldHash()] = field;
-                                log.Debug($"Cached network field: {field.ToName()} ({field.GetFieldHash()})");
+                                netHashes[$"{field.DeclaringType.Name}.{field.Name}Hash"] = field.GetFieldHash();
                             }
                         }
 
@@ -326,8 +431,7 @@ namespace Networking.Objects
                             if (!method.IsStatic && (method.Name.StartsWith("Cmd") || method.Name.StartsWith("Rpc")) && method.ReturnType == typeof(void))
                             {
                                 netMethods[method.GetMethodHash()] = method;
-
-                                log.Debug($"Cached network method: {method.ToName()} ({method.GetMethodHash()})");
+                                netHashes[$"{method.DeclaringType.Name}.{method.Name}Hash"] = method.GetMethodHash();
 
                                 var methodFieldName = $"{method.Name}Hash";
 
@@ -337,18 +441,16 @@ namespace Networking.Objects
                                         continue;
 
                                     field.SetValueFast(method.GetMethodHash());
-                                    log.Debug($"Set value to network method field {field.ToName()} ({method.GetMethodHash()})");
                                 }
                             }
                         }
 
                         foreach (var ev in type.GetAllEvents())
                         {
-                            if (ev.GetRaiseMethod(true) != null && ev.Name.StartsWith("Network"))
+                            if (ev.Name.StartsWith("Network"))
                             {
                                 netEvents[ev.GetEventHash()] = ev;
-
-                                log.Debug($"Cached network event: {ev.ToName()} ({ev.GetEventHash()})");
+                                netHashes[$"{ev.DeclaringType.Name}.{ev.Name}Hash"] = ev.GetEventHash();
 
                                 var eventFieldName = $"{ev.Name}Hash";
 
@@ -358,12 +460,18 @@ namespace Networking.Objects
                                         continue;
 
                                     field.SetValueFast(ev.GetEventHash());
-                                    log.Debug($"Set value to network event field {field.ToName()} ({ev.GetEventHash()})");
                                 }
                             }
                         }
                     }
                 }
+
+                CodeUtils.Delay(() =>
+                {
+                    net.Send(new NetworkHashSyncMessage(new Dictionary<string, ushort>(netHashes)));
+
+                    CodeUtils.Delay(() => OnInitialized.Call(), 200);
+                }, 100);
             }
             catch (Exception ex)
             {

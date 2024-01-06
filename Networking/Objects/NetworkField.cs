@@ -34,6 +34,8 @@ namespace Networking.Objects
             }
         }
 
+        public T ValueDirect { get => value; set => this.value = value; }
+
         public override void Process(IMessage msg)
         {
             if (msg is not NetworkFieldUpdateMessage<T> updateMsg)

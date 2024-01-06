@@ -151,18 +151,29 @@ namespace Common.Extensions
             if (ev is null)
                 throw new ArgumentNullException(nameof(ev));
 
-            var raiseMethod = ev.GetRaiseMethod(true);
+            var evDelegateField = ev.DeclaringType.Field(ev.Name);
 
-            if (raiseMethod is null)
+            if (evDelegateField is null)
+            {
+                Log.Warn($"Tried to raise an event with a missing delegate field: {ev.ToName()}");
                 return;
+            }
+
+            var evDelegate = evDelegateField.GetValueFast<MulticastDelegate>(instance);
+
+            if (evDelegate is null)
+            {
+                Log.Warn($"Cannot raise event '{ev.ToName()}', it's delegate is null (perhaps it doesn't have any listeners).");
+                return;
+            }
 
             try
             {
-                raiseMethod.Call(instance, args);
+                evDelegate.DynamicInvoke(args);
             }
             catch (Exception ex)
             {
-                Log.Error($"Failed to raise event handler '{ev.ToName()}':\n{ex}");
+                Log.Error($"An exception occured while invoking event '{ev.ToName()}':\n{ex}");
             }
         }
     }

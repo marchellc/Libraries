@@ -43,8 +43,11 @@
   <ItemGroup>
     <Compile Include="Activity\ActivityStatus.cs" />
     <Compile Include="Activity\ActivityType.cs" />
-    <Compile Include="Activity\DiscordActivity.cs" />
+    <Compile Include="Entities\DiscordChannel.cs" />
+    <Compile Include="Entities\DiscordEntity.cs" />
+    <Compile Include="Entities\DiscordUser.cs" />
     <Compile Include="Errors\DiscordException.cs" />
+    <Compile Include="Entities\DiscordGuild.cs" />
     <Compile Include="Logging\DiscordLog.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>

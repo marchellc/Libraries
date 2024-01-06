@@ -3,11 +3,10 @@
 using Common.Utilities;
 
 using Networking.Client;
-using Networking.Data;
 using Networking.Objects;
-using Networking.Requests;
 using Networking.Server;
 
+using System;
 using System.Net;
 using System.Threading.Tasks;
 
@@ -46,11 +45,13 @@ namespace Test
                     {
                         var netManager = conn.Get<NetworkManager>();
 
-                        CodeUtils.Delay(() =>
+                        netManager.OnInitialized += () =>
                         {
-                            var testObj = netManager.Instantiate<TestObject>();
-                        }, 200);
-                    }, 200);
+                            var testObj = netManager.Get<TestObject>();
+
+                            testObj.Raise();
+                        };
+                    }, 100);
                 };
             }
             else
@@ -69,11 +70,6 @@ namespace Test
 
                 NetworkClient.instance.Add<NetworkManager>();
                 NetworkClient.instance.Connect(new IPEndPoint(IPAddress.Loopback, clientPortValue));
-                NetworkClient.instance.OnConnected += () =>
-                {
-                    var netManager = NetworkClient.instance.Get<NetworkManager>();
-                    var testObj = netManager.Instantiate<TestObject>();
-                };
             }
 
             await Task.Delay(-1);
@@ -86,59 +82,32 @@ namespace Test
         {
         }
 
-        public NetworkList<string> networkListTest;
-        public int prevSize = 0;
-        public bool isRemoved;
+        public event Action NetworkEventTest;
+        public event Action<string> NetworkStringEventTest;
+
+        private static ushort NetworkEventTestHash;
+        private static ushort NetworkStringEventTestHash;
 
         public override void OnStart()
         {
-            CodeUtils.WhileTrue(() => !isDestroyed && isReady, () =>
-            {
-                if (net.isServer)
-                {
-                    if (networkListTest.Count >= 10)
-                    {
-                        if (!isRemoved)
-                        {
-                            var randomIndex = Generator.Instance.GetInt32(0, networkListTest.Count);
-                            LogOutput.Common.Verbose($"Removing item at random index");
-                            var size = networkListTest.Count;
-                            networkListTest.RemoveAt(randomIndex);
-                            LogOutput.Common.Verbose($"After removal: {size} ({networkListTest.Count})");
-                            isRemoved = true;
-                        }
-                        else
-                        {
-                            LogOutput.Common.Info($"Clearing list");
-                            networkListTest.Clear();
-                            LogOutput.Common.Info($"Count: {networkListTest.Count}");
-                            isRemoved = false;
-                        }
+            NetworkEventTest += OnEvent;
+            NetworkStringEventTest += OnStringEvent;
+        }
 
-                        return;
-                    }
+        public void Raise()
+        {
+            SendEvent(NetworkEventTestHash, true);
+            SendEvent(NetworkStringEventTestHash, true, Generator.Instance.GetString());
+        }
 
-                    var value = Generator.Instance.GetString();
-                    networkListTest.Add(value);
-                    LogOutput.Common.Verbose($"Added value to list: {value} ({networkListTest.Count})");
-                }
-                else
-                {
-                    if (networkListTest.Count != prevSize)
-                    {
-                        LogOutput.Common.Verbose($"List size changed (from {prevSize} to {networkListTest.Count})");
+        private void OnStringEvent(string str)
+        {
+            manager.log.Info($"String Event: {str}");
+        }
 
-                        prevSize = networkListTest.Count;
-
-                        for (int i = 0; i < networkListTest.Count; i++)
-                            LogOutput.Common.Verbose($"{networkListTest[i]}");
-                    }
-                    else
-                    {
-                        LogOutput.Common.Verbose($"List has not changed");
-                    }
-                }
-            }, 1500);
+        private void OnEvent()
+        {
+            manager.log.Info("Event");
         }
     }
 }

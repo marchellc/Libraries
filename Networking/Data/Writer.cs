@@ -11,11 +11,17 @@ using Networking.Utilities;
 using Networking.Pooling;
 
 using Common.Logging;
+using Common.IO.Collections;
+
+using System.Reflection;
+using Common.Values;
 
 namespace Networking.Data
 {
     public class Writer
     {
+        private static LockedDictionary<Type, MethodInfo> cachedGenericWriters = new LockedDictionary<Type, MethodInfo>();
+
         internal WriterPool pool;
         internal LogOutput log = new LogOutput("Network Writer").Setup();
 
@@ -240,7 +246,16 @@ namespace Networking.Data
                 WriteBool(false);
                 WriteType(obj.GetType());
 
-                if (obj is IMessage msg)
+                if (obj is Enum enumValue)
+                {
+                    var enumTypeCode = enumValue.GetTypeCode();
+                    var enumType = enumTypeCode.ToType();
+                    var enumWriter = GetGenericWriterForType(enumType);
+
+                    WriteByte((byte)enumTypeCode);
+                    enumWriter.Call(this, Convert.ChangeType(enumValue, enumType));
+                }
+                else if (obj is IMessage msg)
                 {
                     WriteBool(true);
                     msg.Serialize(this);
@@ -264,6 +279,17 @@ namespace Networking.Data
 
         public void Write<T>(T value)
         {
+            if (typeof(T).IsEnum)
+            {
+                var enumType = Enum.GetUnderlyingType(typeof(T));
+                var enumTypeCode = Type.GetTypeCode(enumType);
+                var enumWriter = GetGenericWriterForType(enumType);
+
+                WriteByte((byte)enumTypeCode);
+                enumWriter.Call(this, Convert.ChangeType(value, enumType));
+                return;
+            }
+
             if (value != null && value is IMessage msg)
             {
                 WriteByte(0);
@@ -372,6 +398,19 @@ namespace Networking.Data
                 throw new InvalidOperationException($"Cannot return to pool");
 
             pool.Return(this);
+        }
+
+        private static MethodInfo GetGenericWriterForType(Type type)
+        {
+            if (cachedGenericWriters.TryGetValue(type, out var method))
+                return method;
+
+            var writeMethod = typeof(Writer).Method("Write");
+
+            if (writeMethod is null)
+                throw new Exception($"Failed to find method 'Write<T>'");
+
+            return cachedGenericWriters[type] = writeMethod.ToGeneric(type);
         }
     }
 }

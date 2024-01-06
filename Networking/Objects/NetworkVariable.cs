@@ -6,11 +6,9 @@ namespace Networking.Objects
 {
     public class NetworkVariable
     {
-        public ConcurrentQueue<IMessage> pending = new ConcurrentQueue<IMessage>();
         public NetworkObject parent;
+        public ConcurrentQueue<IMessage> pending = new ConcurrentQueue<IMessage>();
 
-        public virtual void Write(Writer writer) { }
-        public virtual void Read(Reader reader) { }
         public virtual void Process(IMessage msg) { }
     }
 }

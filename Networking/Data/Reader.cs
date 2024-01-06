@@ -7,7 +7,9 @@ using Networking.Pooling;
 using System;
 using System.Text;
 using System.Collections.Generic;
-using Common.Logging;
+using System.Reflection;
+
+using Common.IO.Collections;
 
 namespace Networking.Data
 {
@@ -271,7 +273,10 @@ namespace Networking.Data
         public Type ReadType()
         {
             var typeName = ReadCleanString();
-            var typeValue = Type.GetType(typeName);
+            var typeValue = Type.GetType(typeName, false, true);
+
+            if (typeValue is null)
+                throw new TypeLoadException($"Type '{typeName}' has not been found.");
 
             return typeValue;
         }

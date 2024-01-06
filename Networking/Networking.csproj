@@ -70,6 +70,7 @@
     <Compile Include="Objects\NetworkCmdMessage.cs" />
     <Compile Include="Objects\NetworkDictionary.cs" />
     <Compile Include="Objects\NetworkField.cs" />
+    <Compile Include="Objects\NetworkHashSyncMessage.cs" />
     <Compile Include="Objects\NetworkList.cs" />
     <Compile Include="Objects\NetworkManager.cs" />
     <Compile Include="Objects\NetworkObject.cs" />

@@ -4,14 +4,46 @@ using System;
 using System.Linq;
 using System.Collections;
 using System.Collections.Generic;
-using System.Collections.Concurrent;
+
 using Common.Pooling.Pools;
 using Common.Pooling;
+
+using System.Threading.Tasks;
 
 namespace Common.Extensions
 {
     public static class CollectionExtensions
     {
+        public static async Task<List<T>> ToListAsync<T>(this IAsyncEnumerable<T> values)
+        {
+            var list = new List<T>();
+
+            await foreach (var tValue in values)
+                list.Add(tValue);
+
+            return list;
+        }
+
+        public static async Task<T[]> ToArrayAsync<T>(this IAsyncEnumerable<T> values)
+        {
+            var list = new List<T>();
+
+            await foreach (var tValue in values)
+                list.Add(tValue);
+
+            return list.ToArray();
+        }
+
+        public static async Task<HashSet<T>> ToHashSetAsync<T>(this IAsyncEnumerable<T> values)
+        {
+            var set = new HashSet<T>();
+
+            await foreach (var tValue in values)
+                set.Add(tValue);
+
+            return set;
+        }
+
         public static void Shuffle<T>(this ICollection<T> source)
         {
             var copy = ListPool<T>.Shared.Next(source);

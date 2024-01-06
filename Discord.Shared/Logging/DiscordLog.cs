@@ -15,14 +15,14 @@ namespace Discord.Shared.Logging
 
         public void Deserialize(Reader reader)
         {
-            severity = (Severity)reader.ReadByte();
             message = reader.ReadCleanString();
+            severity = reader.Read<Severity>();
         }
 
         public void Serialize(Writer writer)
         {
-            writer.WriteByte((byte)severity);
             writer.WriteString(message);
+            writer.Write(severity);
         }
 
         public enum Severity
@@ -34,11 +34,5 @@ namespace Discord.Shared.Logging
             Trace,
             Verbose
         }
-
-        public static void WriteSeverity(Writer writer, Severity severity)
-            => writer.WriteByte((byte)severity);
-
-        public static Severity ReadSeverity(Reader reader)
-            => (Severity)reader.ReadByte();
     }
 }

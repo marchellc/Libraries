@@ -8,17 +8,18 @@ using System;
 using System.Reflection;
 using System.Collections.Generic;
 using System.Linq;
+using Common.Values;
 
 namespace Networking.Utilities
 {
     public static class TypeLoader
     {
-        public static readonly LockedDictionary<Type, Action<Writer, object>> writers;
-        public static readonly LockedDictionary<Type, Func<Reader, object>> readers;
+        public static LockedDictionary<Type, Action<Writer, object>> writers;
+        public static LockedDictionary<Type, Func<Reader, object>> readers;
 
-        public static readonly LogOutput log;
+        public static LogOutput log;
 
-        static TypeLoader()
+        internal static void Init()
         {
             log = new LogOutput("Type Loader");
             log.Setup();
@@ -100,6 +101,24 @@ namespace Networking.Utilities
                 }
             }
 
+            foreach (var writer in writers)
+            {
+                if (!readers.ContainsKey(writer.Key))
+                {
+                    log.Warn($"Missing reader for type '{writer.Key.FullName}'!");
+                    continue;
+                }
+            }
+
+            foreach (var reader in readers)
+            {
+                if (!writers.ContainsKey(reader.Key))
+                {
+                    log.Warn($"Missing reader for type '{reader.Key.FullName}'!");
+                    continue;
+                }
+            }
+
             log.Info($"Cache: {writers.Count}/{readers.Count}");
         }
 
@@ -108,7 +127,21 @@ namespace Networking.Utilities
             if (writers.TryGetValue(type, out var writer))
                 return writer;
 
-            throw new Exception($"No writers for type {type.FullName}");
+            if (type.IsEnum)
+                return (writer, obj) =>
+                {
+                    var enumObj = obj as Enum;
+                    var enumCode = enumObj.GetTypeCode();
+                    var enumNumType = enumCode.ToType();
+                    var enumWriter = writers[enumNumType];
+
+                    writer.WriteByte((byte)enumCode);
+                    writer.WriteType(obj.GetType());
+
+                    enumWriter.Call(writer, Convert.ChangeType(obj, enumNumType));
+                };
+
+            throw new Exception($"No writer for type '{type.FullName}' was found.");
         }
 
         public static Func<Reader, object> GetReader(this Type type)
@@ -116,7 +149,18 @@ namespace Networking.Utilities
             if (readers.TryGetValue(type, out var reader))
                 return reader;
 
-            throw new Exception($"No readers for type {type.FullName}");
+            if (type.IsEnum)
+                return reader =>
+                {
+                    var enumTypeCode = (TypeCode)reader.ReadByte();
+                    var enumType = reader.ReadType();
+                    var enumNumType = enumTypeCode.ToType();
+                    var enunNum = readers[enumNumType].Call(reader);
+
+                    return Convert.ChangeType(enunNum, enumType);
+                };
+
+            throw new Exception($"No reader for type '{type.FullName}' was found.");
         }
     }
 }

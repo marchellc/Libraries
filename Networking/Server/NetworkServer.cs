@@ -3,7 +3,7 @@ using Common.IO.Collections;
 using Common.Logging;
 using Common.Utilities;
 using Networking.Features;
-
+using Networking.Utilities;
 using System;
 
 namespace Networking.Server
@@ -34,6 +34,8 @@ namespace Networking.Server
         {
             version = new Version(1, 0, 0, 0);
             instance = new NetworkServer();
+
+            TypeLoader.Init();
         }
 
         public NetworkServer(int port = 8000)
@@ -154,11 +156,13 @@ namespace Networking.Server
 
             OnDisconnected.Call(connection);
 
-            log.Info($"Client disconnected from {connection.remote} connId={connId}");
+            var remoteStr = connection.remote.ToString();
 
             connection.Stop();
 
             connections.Remove(connId);
+
+            log.Info($"Client disconnected from {remoteStr} connId={connId}");
         }
     }
 }

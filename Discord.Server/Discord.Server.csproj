@@ -8,12 +8,12 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="DSharpPlus" Version="5.0.0-nightly-01932" />
-    <PackageReference Include="DSharpPlus.CommandsNext" Version="5.0.0-nightly-01932" />
-    <PackageReference Include="DSharpPlus.Interactivity" Version="5.0.0-nightly-01932" />
-    <PackageReference Include="DSharpPlus.Rest" Version="5.0.0-nightly-01932" />
-    <PackageReference Include="DSharpPlus.SlashCommands" Version="5.0.0-nightly-01932" />
-    <PackageReference Include="DSharpPlus.VoiceNext" Version="5.0.0-nightly-01932" />
+    <PackageReference Include="DSharpPlus" Version="5.0.0-nightly-01935" />
+    <PackageReference Include="DSharpPlus.CommandsNext" Version="5.0.0-nightly-01935" />
+    <PackageReference Include="DSharpPlus.Interactivity" Version="5.0.0-nightly-01935" />
+    <PackageReference Include="DSharpPlus.Rest" Version="5.0.0-nightly-01935" />
+    <PackageReference Include="DSharpPlus.SlashCommands" Version="5.0.0-nightly-01935" />
+    <PackageReference Include="DSharpPlus.VoiceNext" Version="5.0.0-nightly-01935" />
   </ItemGroup>
 
   <ItemGroup>
