@@ -245,16 +245,7 @@ namespace Networking.Data
                 WriteBool(false);
                 WriteType(obj.GetType());
 
-                if (obj is Enum enumValue)
-                {
-                    var enumTypeCode = enumValue.GetTypeCode();
-                    var enumType = enumTypeCode.ToType();
-                    var enumWriter = GetGenericWriterForType(enumType);
-
-                    WriteByte((byte)enumTypeCode);
-                    enumWriter.Call(this, Convert.ChangeType(enumValue, enumType));
-                }
-                else if (obj is IMessage msg)
+                if (obj is IMessage msg)
                 {
                     WriteBool(true);
                     msg.Serialize(this);
@@ -278,17 +269,6 @@ namespace Networking.Data
 
         public void Write<T>(T value)
         {
-            if (typeof(T).IsEnum)
-            {
-                var enumType = Enum.GetUnderlyingType(typeof(T));
-                var enumTypeCode = Type.GetTypeCode(enumType);
-                var enumWriter = GetGenericWriterForType(enumType);
-
-                WriteByte((byte)enumTypeCode);
-                enumWriter.Call(this, Convert.ChangeType(value, enumType));
-                return;
-            }
-
             if (value != null && value is IMessage msg)
             {
                 WriteByte(0);
