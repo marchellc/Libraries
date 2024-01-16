@@ -58,12 +58,12 @@
     <Compile Include="Address\IPInfo.cs" />
     <Compile Include="Address\IPParser.cs" />
     <Compile Include="Address\IPType.cs" />
+    <Compile Include="ClientConfig.cs" />
     <Compile Include="Client\NetworkClient.cs" />
     <Compile Include="NetworkConnectionStatus.cs" />
     <Compile Include="Data\IMessage.cs" />
     <Compile Include="Data\Reader.cs" />
     <Compile Include="Data\Writer.cs" />
-    <Compile Include="Data\NetworkString.cs" />
     <Compile Include="Features\NetworkFeature.cs" />
     <Compile Include="Features\NetworkFunctions.cs" />
     <Compile Include="NetworkPingMessage.cs" />
@@ -90,6 +90,7 @@
     <Compile Include="Requests\ResponseInfo.cs" />
     <Compile Include="Server\NetworkConnection.cs" />
     <Compile Include="Server\NetworkServer.cs" />
+    <Compile Include="Utilities\LatencyInfo.cs" />
     <Compile Include="Utilities\TypeLoader.cs" />
   </ItemGroup>
   <ItemGroup>

@@ -1,64 +1,44 @@
 ﻿using Common.Extensions;
 
 using Networking.Data;
-
+using Networking.Pooling;
 using System;
-using System.Linq;
 
 namespace Networking.Features
 {
     public class NetworkFunctions
     {
-        private Func<Writer> getWriter;
-        private Func<byte[], Reader> getReader;
-
-        private Action<Writer> sendWriter;
+        private Action<Writer> send;
         private Action disconnect;
 
-        public bool isClient;
-        public bool isServer;
+        public bool IsClient { get; }
+        public bool IsServer { get; }
 
         public NetworkFunctions(
-            Func<Writer> getWriter, 
-            Func<byte[], Reader> getReader, 
-            
-            Action<Writer> sendWriter,
+            Action<Writer> send,
             Action disconnect,
             
             bool isClient)
         {
-            if (getWriter is null)
-                throw new ArgumentNullException(nameof(getWriter));
+            if (send is null)
+                throw new ArgumentNullException(nameof(send));
 
-            if (getReader is null)
-                throw new ArgumentNullException(nameof(getReader));
-
-            if (sendWriter is null)
-                throw new ArgumentNullException(nameof(sendWriter));
-
-            this.getWriter = getWriter;
-            this.getReader = getReader;
-            this.sendWriter = sendWriter;
+            this.send = send;
             this.disconnect = disconnect;
-            this.isClient = isClient;
-            this.isServer = !isClient;
+
+            IsClient = isClient;
+            IsServer = !isClient;
         }
 
         public void Disconnect()
             => disconnect();
 
-        public Writer GetWriter()
-            => getWriter();
-
-        public Reader GetReader(byte[] data)
-            => getReader(data);
-
         public void Send(Writer writer)
-            => sendWriter(writer);
+            => send(writer);
 
         public void Send(Action<Writer> writer)
         {
-            var net = GetWriter();
+            var net = WriterPool.Shared.Rent();
 
             if (net is null)
                 return;

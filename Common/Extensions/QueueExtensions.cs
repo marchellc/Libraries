@@ -1,5 +1,7 @@
-﻿using System.Collections.Concurrent;
+﻿using Common.Pooling.Pools;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace Common.Extensions
 {
@@ -27,6 +29,18 @@ namespace Common.Extensions
         {
             foreach (var item in source)
                 queue.Enqueue(item);
+        }
+
+        public static void Remove<T>(this Queue<T> queue, T value)
+        {
+            var queueValues = ListPool<T>.Shared.Rent(queue);
+
+            queueValues.Remove(value);
+
+            foreach (var queueValue in queueValues)
+                queue.Enqueue(queueValue);
+
+            ListPool<T>.Shared.Return(queueValues);
         }
 
         public static void Clear<T>(this ConcurrentQueue<T> queue)

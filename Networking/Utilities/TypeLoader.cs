@@ -8,7 +8,6 @@ using System;
 using System.Reflection;
 using System.Collections.Generic;
 using System.Linq;
-using Common.Values;
 
 namespace Networking.Utilities
 {
@@ -17,12 +16,12 @@ namespace Networking.Utilities
         public static LockedDictionary<Type, Action<Writer, object>> writers;
         public static LockedDictionary<Type, Func<Reader, object>> readers;
 
-        public static LogOutput log;
+        public static LogOutput Log { get; private set; }
 
         internal static void Init()
         {
-            log = new LogOutput("Type Loader");
-            log.Setup();
+            Log = new LogOutput("Type Loader");
+            Log.Setup();
 
             writers = new LockedDictionary<Type, Action<Writer, object>>();
             readers = new LockedDictionary<Type, Func<Reader, object>>();
@@ -86,7 +85,7 @@ namespace Networking.Utilities
 
                             readers[method.ReturnType] = reader => method.Call(null, reader);
 
-                            log.Debug($"Cached custom reader: {method.ReturnType.FullName} ({method.ToName()})");
+                            Log.Debug($"Cached custom reader: {method.ReturnType.FullName} ({method.ToName()})");
                         }
                         else if (method.ReturnType == typeof(void) && methodParams.Length == 1 && methodParams[0].ParameterType == typeof(Writer))
                         {
@@ -95,7 +94,7 @@ namespace Networking.Utilities
 
                             writers[methodParams[0].ParameterType] = (writer, value) => method.Call(null, writer, value);
 
-                            log.Debug($"Cached custom writer: {methodParams[0].ParameterType.FullName} ({method.ToName()})");
+                            Log.Debug($"Cached custom writer: {methodParams[0].ParameterType.FullName} ({method.ToName()})");
                         }
                     }
                 }
@@ -105,7 +104,7 @@ namespace Networking.Utilities
             {
                 if (!readers.ContainsKey(writer.Key))
                 {
-                    log.Warn($"Missing reader for type '{writer.Key.FullName}'!");
+                    Log.Warn($"Missing reader for type '{writer.Key.FullName}'!");
                     continue;
                 }
             }
@@ -114,12 +113,12 @@ namespace Networking.Utilities
             {
                 if (!writers.ContainsKey(reader.Key))
                 {
-                    log.Warn($"Missing reader for type '{reader.Key.FullName}'!");
+                    Log.Warn($"Missing reader for type '{reader.Key.FullName}'!");
                     continue;
                 }
             }
 
-            log.Info($"Cache: {writers.Count}/{readers.Count}");
+            Log.Info($"Cache: {writers.Count}/{readers.Count}");
         }
 
         public static Action<Writer, object> GetWriter(this Type type)

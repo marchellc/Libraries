@@ -12,7 +12,10 @@ namespace Common.Values
             set => _weakRef?.SetTarget(value);
         }
 
-        public bool IsAlive { get => _weakRef != null && _weakRef.TryGetTarget(out _); }
+        public bool IsAlive
+        {
+            get => _weakRef != null && _weakRef.TryGetTarget(out _);
+        }
 
         public WeakValue(bool trackValue = true)
             => _weakRef = new WeakReference<TValue>(null, trackValue);

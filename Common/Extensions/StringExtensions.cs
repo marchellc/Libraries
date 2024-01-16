@@ -42,7 +42,7 @@ namespace Common.Extensions
 
             if (closeTagIndexes.Count > 0)
             {
-                var sb = StringBuilderPool.Shared.Next();
+                var sb = StringBuilderPool.Shared.Rent();
                 var previousIndex = 0;
 
                 foreach (int closeTagIndex in closeTagIndexes)
@@ -60,7 +60,7 @@ namespace Common.Extensions
                 if (closeTagIndexes.Max() < text.Length)
                     sb.Append(text.Substring(closeTagIndexes.Max() + 1));
 
-                return StringBuilderPool.Shared.StringReturn(sb);
+                return StringBuilderPool.Shared.ToStringReturn(sb);
             }
             else
             {
@@ -187,7 +187,7 @@ namespace Common.Extensions
             if (string.IsNullOrWhiteSpace(input))
                 return input;
 
-            var builder = StringBuilderPool.Shared.Next();
+            var builder = StringBuilderPool.Shared.Rent();
 
             for (int i = 0; i < input.Length; i++)
             {
@@ -197,7 +197,7 @@ namespace Common.Extensions
                     builder.Append(c);
             }
 
-            return StringBuilderPool.Shared.StringReturn(builder);
+            return StringBuilderPool.Shared.ToStringReturn(builder);
         }
 
         public static ushort GetStableHash(this string str)
@@ -306,7 +306,7 @@ namespace Common.Extensions
             if (str.Length <= 1)
                 return str;
 
-            var sb = StringBuilderPool.Shared.Next();
+            var sb = StringBuilderPool.Shared.Rent();
 
             sb.Append(char.ToLowerInvariant(str[0]));
 
@@ -318,7 +318,7 @@ namespace Common.Extensions
                     sb.Append(str[i]);
             }
 
-            return StringBuilderPool.Shared.StringReturn(sb);
+            return StringBuilderPool.Shared.ToStringReturn(sb);
         }
 
         public static string CamelCase(this string str)

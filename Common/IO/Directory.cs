@@ -58,7 +58,7 @@ namespace Common.IO
 
         public File[] GetFiles(string pattern = "*")
         {
-            var list = ListPool<File>.Shared.Next();
+            var list = ListPool<File>.Shared.Rent();
 
             foreach (var filePath in System.IO.Directory.GetFiles(Info.FullName, pattern))
                 list.Add(new File(filePath));
@@ -68,7 +68,7 @@ namespace Common.IO
 
         public File[] GetFilesWithSubdirectories(string pattern = "*")
         {
-            var list = ListPool<File>.Shared.Next();
+            var list = ListPool<File>.Shared.Rent();
 
             foreach (var filePath in System.IO.Directory.GetFiles(Info.FullName, pattern, SearchOption.AllDirectories))
                 list.Add(new File(filePath));

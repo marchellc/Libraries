@@ -1,74 +1,31 @@
-﻿using Common.Pooling.Buffers;
+﻿using Common.Extensions;
 
 using System;
 
 namespace Common.Pooling.Pools
 {
-    public class PoolablePool<TPoolable> : IPool<TPoolable> where TPoolable : IPoolable, new()
+    public class PoolablePool<T> : Pool<T> 
+        where T : PoolableItem
     {
-        public static PoolablePool<TPoolable> Shared { get; } 
+        private static readonly Type cachedType = typeof(T);
 
-        static PoolablePool()
+        public static PoolablePool<T> Shared { get; } = new PoolablePool<T>(64);
+
+        public PoolablePool(uint size) : base(size) { }
+
+        public override T Construct()
+            => cachedType.Construct() as T;
+
+        public override void OnRenting(T value)
         {
-            Shared = new PoolablePool<TPoolable>(PoolOptions.NewOnMissing);
-            PoolHelper<TPoolable>.SetPool(Shared, 15);
+            value.isPooled = false;
+            value.OnUnPooled();
         }
 
-        public PoolablePool(PoolOptions options, IPoolBuffer<TPoolable> buffer = null)
+        public override void OnReturning(T value)
         {
-            Options = options;
-            Buffer = buffer ?? new PoolableBuffer<TPoolable>(this);
-        }
-
-        public PoolOptions Options { get; set; }
-
-        public IPoolBuffer<TPoolable> Buffer { get; set; }
-
-        public TPoolable Next()
-        {
-            if (Buffer is null)
-                throw new InvalidOperationException($"This pool's buffer is missing");
-
-            var item = Buffer.Get();
-
-            item.OnRemoved();
-
-            return item;
-        }
-
-        public void Return(TPoolable obj)
-        {
-            if (Buffer is null)
-                throw new InvalidOperationException($"This pool's buffer is missing");
-
-            obj.OnAdded();
-
-            Buffer.Add(obj);
-        }
-
-        public void Clear()
-        {
-            if (Buffer is null)
-                throw new InvalidOperationException($"This pool's buffer is missing");
-
-            Buffer.Clear();
-            Buffer = null;
-
-            Options = default;
-        }
-
-        public void Initialize(int initialSize)
-        {
-            if (Buffer is null)
-                throw new InvalidOperationException($"This pool's buffer is missing");
-
-            if (initialSize > 0)
-            {
-                for (int i = 0; i < initialSize; i++)
-                {
-                    Buffer.AddNew();
-                }
-            }
+            value.isPooled = false;
+            value.OnPooled();
         }
     }
 }

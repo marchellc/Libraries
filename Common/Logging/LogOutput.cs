@@ -1,4 +1,6 @@
-﻿using Common.Logging.Console;
+﻿using Common.Extensions;
+using Common.IO.Collections;
+using Common.Logging.Console;
 using Common.Logging.File;
 using Common.Utilities;
 
@@ -12,32 +14,44 @@ namespace Common.Logging
 {
     public class LogOutput : Disposable
     {
-        private string source;
-        private List<ILogger> loggers;
+        private static readonly LockedList<LogOutput> allOutputs = new LockedList<LogOutput>();
+
+        private string source = "";
+        private List<ILogger> loggers = new List<ILogger>();
 
         public static LogOutput Common { get; private set; } 
 
+        public static LogOutput[] Outputs
+        {
+            get => allOutputs.ToArray();
+        }
+
         public LogOutput(string source = null)
         {
-            this.source = source;
-            this.loggers = new List<ILogger>();
-
-            if (string.IsNullOrWhiteSpace(this.source))
+            if (string.IsNullOrWhiteSpace(source))
             {
                 var method = new StackFrame(0).GetMethod();
 
                 if (method is null || method.DeclaringType is null)
-                    this.source = Assembly.GetCallingAssembly().GetName().Name;
+                    Name = Assembly.GetCallingAssembly().GetName().Name;
                 else
-                    this.source = $"{method.DeclaringType.Name}";
+                    Name = $"{method.DeclaringType.Name}";
             }
+            else
+                Name = source;
 
             Enabled = LogUtils.General | LogUtils.Debug;
+
+            allOutputs.Add(this);
         }
 
         public LogLevel Enabled { get; set; }
 
-        public string Name { get => source; set => source = value; }
+        public string Name
+        {
+            get => source ?? string.Empty;
+            set => source = value ?? Assembly.GetCallingAssembly().GetName().Name;
+        }
 
         public bool HasLogger<TLogger>() where TLogger : ILogger
             => loggers.Any(t => t is TLogger);
@@ -137,10 +151,10 @@ namespace Common.Logging
         {
             foreach (var log in loggers)
             {
-                if (log is not Disposable disposable)
-                    continue;
-
-                disposable.Dispose();
+                if (log is Disposable apiDisposable)
+                    apiDisposable.Dispose();
+                else if (log is IDisposable disposable)
+                    disposable.Dispose();
             }
 
             loggers.Clear();
@@ -148,8 +162,40 @@ namespace Common.Logging
 
             source = null;
 
-            if (Common == this)
+            if (Common != null && Common == this)
                 Common = null;
+
+            allOutputs.Remove(this);
+        }
+
+        public static void AddToAll<TLogger>() where TLogger : ILogger, new()
+            => AddToAll(typeof(TLogger).Construct() as ILogger);
+
+        public static void AddToAll(ILogger logger)
+        {
+            if (logger is null)
+                throw new ArgumentNullException(nameof(logger));
+
+            foreach (var output in allOutputs)
+            {
+                if (!output.loggers.Any(l => l.GetType() == logger.GetType()))
+                    output.AddLogger(logger);
+            }
+        }
+
+        public static void RemoveFromAll<TLogger>() where TLogger : ILogger, new()
+            => RemoveFromAll(typeof(TLogger));
+
+        public static void RemoveFromAll(Type type)
+        {
+            if (type is null)
+                throw new ArgumentNullException(nameof(type));
+
+            if (!typeof(ILogger).IsAssignableFrom(type))
+                throw new Exception($"Type '{type.FullName}' is not a subclass of ILogger");
+
+            foreach (var output in allOutputs)
+                output.loggers?.RemoveAll(l => l.GetType() == type);
         }
 
         internal static void Init()

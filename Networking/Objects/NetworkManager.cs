@@ -47,7 +47,7 @@ namespace Networking.Objects
 
                 LoadTypes();
 
-                if (net.isServer)
+                if (Network.IsServer)
                     Listen<NetworkCmdMessage>(OnCmd);
                 else
                     Listen<NetworkRpcMessage>(OnRpc);
@@ -58,11 +58,11 @@ namespace Networking.Objects
                 Listen<NetworkVariableSyncMessage>(OnVarSync);
                 Listen<NetworkRaiseEventMessage>(OnRaise);
 
-                log.Info($"Object networking initialized.");
+                Log.Info($"Object networking initialized.");
             }
             catch (Exception ex)
             {
-                log.Error(ex);
+                Log.Error(ex);
             }
         }
 
@@ -95,7 +95,7 @@ namespace Networking.Objects
             netHashes.Clear();
             netHashes = null;
 
-            log.Info($"Object networking unloaded.");
+            Log.Info($"Object networking unloaded.");
         }
 
         public void ListenCreate<T>(Action<T> listener) where T : NetworkObject
@@ -131,7 +131,7 @@ namespace Networking.Objects
 
             objects[typeof(T)] = instance;
 
-            net.Send(new NetworkObjectAddMessage(typeof(T).GetTypeHash()));
+            Network.Send(new NetworkObjectAddMessage(typeof(T).GetTypeHash()));
 
             instance.isDestroyed = false;
             instance.isReady = true;
@@ -162,7 +162,7 @@ namespace Networking.Objects
 
             objects.Remove(typeof(T));
 
-            net.Send(new NetworkObjectRemoveMessage(typeHash));
+            Network.Send(new NetworkObjectRemoveMessage(typeHash));
 
             if (destroyListeners.TryGetValue(typeof(T), out var listener))
                 listener.Call(netObject);
@@ -172,100 +172,100 @@ namespace Networking.Objects
         {
             if (!netEvents.TryGetValue(raiseMsg.eventHash, out var ev))
             {
-                log.Warn($"Received a RAISE call for an unknown event: {raiseMsg.eventHash}");
+                Log.Warn($"Received a RAISE call for an unknown event: {raiseMsg.eventHash}");
                 return;
             }
 
             if (!netTypes.TryGetValue(raiseMsg.typeHash, out var type))
             {
-                log.Warn($"Received a RAISE call for an unknown type: {raiseMsg.typeHash}");
+                Log.Warn($"Received a RAISE call for an unknown type: {raiseMsg.typeHash}");
                 return;
             }
 
             if (!objects.TryGetValue(type, out var obj))
             {
-                log.Warn($"Received a RAISE call for type '{type.FullName}' with a missing instance.");
+                Log.Warn($"Received a RAISE call for type '{type.FullName}' with a missing instance.");
                 return;
             }
 
             ev.Raise(obj, raiseMsg.args);
 
-            log.Debug($"Raised event '{ev.ToName()}'");
+            Log.Debug($"Raised event '{ev.ToName()}'");
         }
 
         private void OnCmd(NetworkCmdMessage cmdMsg)
         {
-            if (net.isClient)
+            if (Network.IsClient)
             {
-                log.Warn($"Received a CMD call request on the client.");
+                Log.Warn($"Received a CMD call request on the client.");
                 return;
             }
 
             if (!netMethods.TryGetValue(cmdMsg.functionHash, out var netMethod))
             {
-                log.Warn($"Received a CMD call for an unknown function: {cmdMsg.functionHash}");
+                Log.Warn($"Received a CMD call for an unknown function: {cmdMsg.functionHash}");
                 return;
             }
 
             if (!netTypes.TryGetValue(cmdMsg.typeHash, out var type))
             {
-                log.Warn($"Received a CMD message with an unknown type hash: {cmdMsg.typeHash}");
+                Log.Warn($"Received a CMD message with an unknown type hash: {cmdMsg.typeHash}");
                 return;
             }
 
             if (!objects.TryGetValue(type, out var obj))
             {
-                log.Warn($"Received a CMD message for type with no active instance ({type.FullName})");
+                Log.Warn($"Received a CMD message for type with no active instance ({type.FullName})");
                 return;
             }
 
             netMethod.Call(obj, cmdMsg.args);
 
-            log.Debug($"Called by CMD: {netMethod.ToName()} (with {cmdMsg.args?.Length ?? -1} args)");
+            Log.Debug($"Called by CMD: {netMethod.ToName()} (with {cmdMsg.args?.Length ?? -1} args)");
         }
 
         private void OnRpc(NetworkRpcMessage rpcMsg)
         {
-            if (net.isServer)
+            if (Network.IsServer)
             {
-                log.Warn($"Received a RPC call request on the server.");
+                Log.Warn($"Received a RPC call request on the server.");
                 return;
             }
 
             if (!netMethods.TryGetValue(rpcMsg.functionHash, out var netMethod))
             {
-                log.Warn($"Received a CMD call for an unknown function: {rpcMsg.functionHash}");
+                Log.Warn($"Received a CMD call for an unknown function: {rpcMsg.functionHash}");
                 return;
             }
 
             if (!netTypes.TryGetValue(rpcMsg.typeHash, out var type))
             {
-                log.Warn($"Received a RPC message with an unknown type hash: {rpcMsg.typeHash}");
+                Log.Warn($"Received a RPC message with an unknown type hash: {rpcMsg.typeHash}");
                 return;
             }
 
             if (!objects.TryGetValue(type, out var obj) || obj.isDestroyed || !obj.isReady)
             {
-                log.Warn($"Received a RPC message for type with no active instance ({type.FullName})");
+                Log.Warn($"Received a RPC message for type with no active instance ({type.FullName})");
                 return;
             }
 
             netMethod.Call(obj, rpcMsg.args);
 
-            log.Debug($"Called by RPC: {netMethod.ToName()} (with {rpcMsg.args?.Length ?? -1} args)");
+            Log.Debug($"Called by RPC: {netMethod.ToName()} (with {rpcMsg.args?.Length ?? -1} args)");
         }
 
         private void OnVarSync(NetworkVariableSyncMessage syncMsg)
         {
             if (!netTypes.TryGetValue(syncMsg.typeHash, out var type))
             {
-                log.Warn($"Received a VAR_SYNC message with an unknown type hash: {syncMsg.typeHash}");
+                Log.Warn($"Received a VAR_SYNC message with an unknown type hash: {syncMsg.typeHash}");
                 return;
             }
 
             if (!objects.TryGetValue(type, out var obj) || obj.isDestroyed || !obj.isReady)
             {
-                log.Warn($"Received a VAR_SYNC message for type with no active instance ({type.FullName})");
+                Log.Warn($"Received a VAR_SYNC message for type with no active instance ({type.FullName})");
                 return;
             }
 
@@ -289,7 +289,7 @@ namespace Networking.Objects
                 }
                 else
                 {
-                    log.Warn($"Received a DESTROY message for type '{type.FullName}', but there isn't any instance present.");
+                    Log.Warn($"Received a DESTROY message for type '{type.FullName}', but there isn't any instance present.");
                     return;
                 }
 
@@ -297,7 +297,7 @@ namespace Networking.Objects
             }
             else
             {
-                log.Warn($"Received a DESTROY message with an unknown type hash: {destroyMsg.typeHash}");
+                Log.Warn($"Received a DESTROY message with an unknown type hash: {destroyMsg.typeHash}");
             }
         }
 
@@ -307,7 +307,7 @@ namespace Networking.Objects
             {
                 if (objects.TryGetValue(type, out _))
                 {
-                    log.Warn($"Received an ADD message for type '{type.FullName}', but there is already an instance present. Keeping it.");
+                    Log.Warn($"Received an ADD message for type '{type.FullName}', but there is already an instance present. Keeping it.");
                     return;
                 }
 
@@ -326,13 +326,13 @@ namespace Networking.Objects
             }
             else
             {
-                log.Warn($"Receive an ADD message with an unknown type hash: {addMsg.typeHash}");
+                Log.Warn($"Receive an ADD message with an unknown type hash: {addMsg.typeHash}");
             }
         }
 
         private void OnHashSync(NetworkHashSyncMessage syncMsg)
         {
-            log.Info($"Received a hash sync message with {syncMsg.hashes.Count} hashes.");
+            Log.Info($"Received a hash sync message with {syncMsg.hashes.Count} hashes.");
 
             foreach (var hash in syncMsg.hashes)
             {
@@ -341,25 +341,25 @@ namespace Networking.Objects
                     || netProperties.ContainsKey(hash.Value)
                     || netFields.ContainsKey(hash.Value))
                 {
-                    log.Verbose($"Hash '{hash.Key}'={hash.Value} is already known to this client, skipping ..");
+                    Log.Verbose($"Hash '{hash.Key}'={hash.Value} is already known to this client, skipping ..");
                     continue;
                 }
 
-                log.Info($"Received an unknown hash: '{hash.Key}'={hash.Value}");
+                Log.Info($"Received an unknown hash: '{hash.Key}'={hash.Value}");
 
                 var split = hash.Key.Split('.');
 
                 if (split.Length != 2)
                     continue;
 
-                log.Verbose($"Split: type={split[0]} field={split[1]}");
+                Log.Verbose($"Split: type={split[0]} field={split[1]}");
 
                 foreach (var type in netTypes)
                 {
                     if (type.Value.Name != split[0])
                         continue;
 
-                    log.Verbose($"Type '{type.Value.FullName}' should contain field '{split[1]}'");
+                    Log.Verbose($"Type '{type.Value.FullName}' should contain field '{split[1]}'");
 
                     try
                     {
@@ -370,16 +370,16 @@ namespace Networking.Objects
 
                         field.SetValueFast(hash.Value);
 
-                        log.Verbose($"Field '{field.ToName()}' value set to {hash.Value}");
+                        Log.Verbose($"Field '{field.ToName()}' value set to {hash.Value}");
                     }
                     catch (Exception ex)
                     {
-                        log.Error(ex);
+                        Log.Error(ex);
                     }
                 }
             }
 
-            log.Info($"Synchronized {syncMsg.hashes.Count} hashes.");
+            Log.Info($"Synchronized {syncMsg.hashes.Count} hashes.");
         }
 
         private void LoadTypes()
@@ -468,15 +468,15 @@ namespace Networking.Objects
 
                 CodeUtils.Delay(() =>
                 {
-                    net.Send(new NetworkHashSyncMessage(new Dictionary<string, ushort>(netHashes)));
+                    Network.Send(new NetworkHashSyncMessage(new Dictionary<string, ushort>(netHashes)));
 
                     CodeUtils.Delay(() => OnInitialized.Call(), 200);
                 }, 100);
             }
             catch (Exception ex)
             {
-                log.Error($"Failed to load network types, disconnecting!\n{ex}");
-                net.Disconnect();
+                Log.Error($"Failed to load network types, disconnecting!\n{ex}");
+                Network.Disconnect();
             }
         }
     }

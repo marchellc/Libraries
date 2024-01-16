@@ -1,71 +1,74 @@
-﻿using Common.Pooling;
+﻿using Common.Logging;
+using Common.IO.Collections;
 using Common.Extensions;
+using Common.Utilities;
 using Common.Pooling.Pools;
 
 using System.Collections.Generic;
+using System.Reflection;
 using System.Text;
 using System.Linq;
 using System;
 
 using Networking.Utilities;
-using Networking.Pooling;
-
-using Common.Logging;
-using Common.IO.Collections;
-
-using System.Reflection;
-using Common.Values;
 
 namespace Networking.Data
 {
-    public class Writer
+    public class Writer : Disposable
     {
         private static LockedDictionary<Type, MethodInfo> cachedGenericWriters = new LockedDictionary<Type, MethodInfo>();
 
-        internal WriterPool pool;
         internal LogOutput log = new LogOutput("Network Writer").Setup();
 
         private List<byte> buffer;
+
         private Encoding encoding;
+
         private char[] charBuffer;
 
-        public bool IsEmpty => buffer is null || buffer.Count <= 0;
-        public bool IsFull => buffer != null && buffer.Count >= buffer.Capacity;
+        public bool IsEmpty
+        {
+            get => buffer is null || buffer.Count == 0;
+        }
 
-        public int Size => buffer.Count;
-        public int CharSize => charBuffer.Length;
+        public bool IsFull
+        {
+            get => buffer != null && buffer.Count >= buffer.Capacity;
+        }
 
-        public byte[] Buffer => buffer.ToArray();
-        public char[] CharBuffer => charBuffer;
+        public int Size
+        {
+            get => buffer?.Count ?? 0;
+        }
 
-        public Encoding Encoding { get => encoding; set => encoding = value; }
+        public int CharSize
+        {
+            get => charBuffer.Length;
+        }
 
-        public event Action OnPooled;
-        public event Action OnUnpooled;
+        public byte[] Buffer
+        {
+            get => buffer?.ToArray() ?? Array.Empty<byte>();
+        }
 
-        public Writer() : this(Encoding.Default) { }
+        public char[] CharBuffer
+        {
+            get => charBuffer ?? Array.Empty<char>();
+        }
+
+        public Encoding Encoding
+        {
+            get => encoding ??= Encoding.Default;
+            set => encoding = value ?? Encoding.Default;
+        }
+
+        public Writer() 
+            : this(Encoding.Default) { }
 
         public Writer(Encoding encoding)
         {
             this.encoding = encoding;
             this.charBuffer = new char[1];
-            this.buffer = ListPool<byte>.Shared.Next();
-        }
-
-        internal void ToPool()
-        {
-            this.buffer?.Return();
-            this.buffer = null;
-
-            OnPooled.Call();
-        }
-
-        internal void FromPool()
-        {
-            this.buffer = ListPool<byte>.Shared.Next();
-            this.encoding ??= Encoding.Default;
-
-            OnUnpooled.Call();
         }
 
         public void WriteByte(byte value)
@@ -211,9 +214,7 @@ namespace Networking.Data
         }
 
         public void WriteType(Type type)
-        {
-            WriteString(type.AssemblyQualifiedName);
-        }
+            => WriteString(type.AssemblyQualifiedName);
 
         public void WriteTime(TimeSpan span)
             => WriteLong(span.Ticks);
@@ -221,17 +222,15 @@ namespace Networking.Data
         public void WriteDate(DateTime date)
             => WriteLong(date.Ticks);
 
+        public void WriteWriter(Writer writer)
+            => WriteBytes(writer.Buffer);
+
         public void WriteVersion(Version version)
         {
             WriteInt(version.Major);
             WriteInt(version.Minor);
             WriteInt(version.Build);
             WriteInt(version.Revision);
-        }
-
-        public void WriteWriter(Writer writer)
-        {
-            WriteBytes(writer.Buffer);
         }
 
         public void WriteAnonymous(object obj)
@@ -392,12 +391,14 @@ namespace Networking.Data
             return array;
         }
 
-        public void Return()
-        {
-            if (pool is null)
-                throw new InvalidOperationException($"Cannot return to pool");
+        public void EnsureBuffer()
+            => this.buffer ??= ListPool<byte>.Shared.Rent();
 
-            pool.Return(this);
+        public override void OnDispose()
+        {
+            ListPool<byte>.Shared.Return(buffer);
+
+            this.buffer = null;
         }
 
         private static MethodInfo GetGenericWriterForType(Type type)

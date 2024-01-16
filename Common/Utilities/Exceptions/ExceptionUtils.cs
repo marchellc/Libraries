@@ -9,7 +9,7 @@ namespace Common.Utilities.Exceptions
     {
         public static string FormatTrace(StackFrame[] trace)
         {
-            var str = StringBuilderPool.Shared.Next();
+            var str = StringBuilderPool.Shared.Rent();
 
             str.AppendLine($"Showing trace with {trace.Length} points;");
 
@@ -24,18 +24,18 @@ namespace Common.Utilities.Exceptions
                     $"[{i}]: {method.DeclaringType.FullName}.{method.Name}");
             }
 
-            return StringBuilderPool.Shared.StringReturn(str);
+            return StringBuilderPool.Shared.ToStringReturn(str);
         }
 
         public static string FormatException(Exception exception)
         {
-            var str = StringBuilderPool.Shared.Next();
+            var str = StringBuilderPool.Shared.Rent();
 
             str.AppendLine($"Showing exception of type '{exception.GetType().Name}'");
             str.AppendLine($"Status code: {exception.HResult}");
             str.AppendLine($"Status message: {exception.Message}");
 
-            return StringBuilderPool.Shared.StringReturn(str);
+            return StringBuilderPool.Shared.ToStringReturn(str);
         }
     }
 }

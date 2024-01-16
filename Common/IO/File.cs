@@ -30,7 +30,7 @@ namespace Common.IO
             using (var fs = System.IO.File.Open(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.ReadWrite))
             using (var br = new BinaryReader(fs))
             {
-                var list = ListPool<byte>.Shared.Next();
+                var list = ListPool<byte>.Shared.Rent();
                 var exc = default(EndOfStreamException);
 
                 while (exc != null)
@@ -54,7 +54,7 @@ namespace Common.IO
             using (var fs = System.IO.File.Open(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.ReadWrite))
             using (var sr = new StreamReader(fs))
             {
-                var lines = ListPool<string>.Shared.Next();
+                var lines = ListPool<string>.Shared.Rent();
 
                 string line = null;
 

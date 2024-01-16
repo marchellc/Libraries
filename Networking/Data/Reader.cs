@@ -1,4 +1,5 @@
-﻿using Common.Extensions;
+﻿using Common.Utilities;
+using Common.Extensions;
 using Common.Pooling.Pools;
 
 using Networking.Utilities;
@@ -7,80 +8,90 @@ using Networking.Pooling;
 using System;
 using System.Text;
 using System.Collections.Generic;
-using System.Reflection;
-
-using Common.IO.Collections;
 
 namespace Networking.Data
 {
-    public class Reader 
+    public class Reader : Disposable
     {
-        public const byte BYTE_SIZE = 1;
-        public const byte SBYTE_SIZE = 1;
-
-        public const byte INT_16_SIZE = 2;
-        public const byte INT_32_SIZE = 4;
-        public const byte INT_64_SIZE = 8;
-
-        public const byte SINGLE_SIZE = 4;
-        public const byte DOUBLE_SIZE = 8;
-
-        internal ReaderPool pool;
-
         private Encoding encoding;
+
         private List<byte> buffer;
+
         private byte[] data;
+
         private int offset;
 
-        public byte[] Data => data;
-        public byte[] Buffer => buffer.ToArray();
-
-        public int Offset { get => offset; set => offset = value; }
-
-        public int Size => data.Length;
-        public int BufferSize => buffer.Count;
-
-        public bool IsEmpty => data is null || data.Length <= 0;
-        public bool IsEnd => offset >= data.Length;
-
-        public Encoding Encoding { get => encoding; set => encoding = value; }
-
-        public event Action<int, int> OnMoved;
-
-        public event Action OnPooled;
-        public event Action OnUnpooled;
-
-        public Reader() : this(Encoding.Default) { }
-
-        public Reader(Encoding encoding) 
-        { 
-            this.encoding = encoding;
+        public byte[] Data
+        {
+            get => data ?? Array.Empty<byte>();
         }
 
-        internal void ToPool()
+        public byte[] Buffer
         {
-            ListPool<byte>.Shared.Return(buffer);
-
-            data = null;
-            buffer = null;
-
-            offset = 0;
-
-            OnPooled.Call();
+            get => buffer.ToArray();
         }
 
-        internal void FromPool(byte[] data)
+        public int Offset
         {
-            this.buffer = ListPool<byte>.Shared.Next();
-            this.data = data;
+            get => offset;
+            set => offset = value < 0 ? 0 : value;
+        }
+
+        public int Size
+        {
+            get => data.Length;
+        }
+
+        public int BufferSize
+        {
+            get => buffer.Count;
+        }
+
+        public bool IsEmpty
+        {
+            get => data is null || data.Length == 0;
+        }
+
+        public bool IsEnd
+        {
+            get => offset >= data.Length;
+        }
+
+        public Encoding Encoding
+        {
+            get => encoding ??= Encoding.Default;
+            set => encoding = value ?? Encoding.Default;
+        }
+
+        public Reader() 
+            : this(Encoding.Default) { }
+
+        public Reader(Encoding encoding)
+            => this.encoding = encoding;
+
+        public void SetData(byte[] data)
+        {
+            this.buffer = ListPool<byte>.Shared.Rent();
             this.encoding ??= Encoding.Default;
+            this.data = data;
 
-            OnUnpooled.Call();
+            this.offset = 0;
+        }
+
+        public override void OnDispose()
+        {
+            ListPool<byte>.Shared.Return(this.buffer);
+
+            this.buffer = null;
+            this.data = null;
+
+            this.offset = 0;
         }
 
         public byte ReadByte()
         {
-            Move(BYTE_SIZE);
+            Move(1);
+
             return buffer[0];
         }
 
@@ -100,6 +111,7 @@ namespace Networking.Data
                 throw new ArgumentOutOfRangeException("size");
 
             Move(size);
+
             return buffer.ToArray();
         }
 
@@ -139,37 +151,63 @@ namespace Networking.Data
 
         public sbyte ReadSByte()
         {
-            Move(SBYTE_SIZE);
+            Move(1);
+
             return (sbyte)buffer[0];
         }
 
         public short ReadShort()
         {
-            Move(INT_16_SIZE);
+            Move(2);
+
             return (short)(buffer[0] | buffer[1] << 8);
         }
 
         public ushort ReadUShort()
         {
-            Move(INT_16_SIZE);
+            Move(2);
+
             return (ushort)(buffer[0] | buffer[1] << 8);
         }
 
         public int ReadInt()
         {
-            Move(INT_32_SIZE);
+            Move(4);
+
             return buffer[0] | buffer[1] << 8 | buffer[2] << 16 | buffer[3] << 24;
         }
 
         public uint ReadUInt()
         {
-            Move(INT_32_SIZE);
+            Move(4);
+
             return (uint)(buffer[0] | buffer[1] << 8 | buffer[2] << 16 | buffer[3] << 24);
+        }
+
+        public int Read7BitEncodedInt()
+        {
+            var count = 0;
+            var shift = 0;
+
+            byte val;
+
+            do
+            {
+                if (shift == (5 * 7))
+                    throw new FormatException("Incorrect 7-bit int32 format");
+
+                val = ReadByte();
+                count |= (val & 0x7F) << shift;
+                shift += 7;
+            }
+            while ((val & 0x80) != 0);
+
+            return count;
         }
 
         public long ReadLong()
         {
-            Move(INT_64_SIZE);
+            Move(8);
 
             var lo = (uint)(buffer[0] | buffer[1] << 8 | buffer[2] << 16 | buffer[3] << 24);
             var hi = (uint)(buffer[4] | buffer[5] << 8 | buffer[6] << 16 | buffer[7] << 24);
@@ -179,7 +217,7 @@ namespace Networking.Data
 
         public ulong ReadULong()
         {
-            Move(INT_64_SIZE);
+            Move(8);
 
             var lo = (uint)(buffer[0] | buffer[1] << 8 | buffer[2] << 16 | buffer[3] << 24);
             var hi = (uint)(buffer[4] | buffer[5] << 8 | buffer[6] << 16 | buffer[7] << 24);
@@ -189,7 +227,7 @@ namespace Networking.Data
 
         public unsafe float ReadFloat()
         {
-            Move(SINGLE_SIZE);
+            Move(8);
 
             var buff = (uint)(buffer[0] | buffer[1] << 8 | buffer[2] << 16 | buffer[3] << 24);
 
@@ -198,7 +236,7 @@ namespace Networking.Data
 
         public unsafe double ReadDouble()
         {
-            Move(DOUBLE_SIZE);
+            Move(8);
 
             var lo = (uint)(buffer[0] | buffer[1] << 8 | buffer[2] << 16 | buffer[3] << 24);
             var hi = (uint)(buffer[4] | buffer[5] << 8 | buffer[6] << 16 | buffer[7] << 24);
@@ -209,7 +247,8 @@ namespace Networking.Data
 
         public bool ReadBool()
         {
-            Move(BYTE_SIZE);
+            Move(1);
+
             return buffer[0] != 0;
         }
 
@@ -244,24 +283,6 @@ namespace Networking.Data
 
         public DateTime ReadDate()
             => new DateTime(ReadLong());
-
-        public NetworkString ReadString()
-        {
-            var stringId = ReadByte();
-
-            if (stringId == 0)
-                return new NetworkString(true, true, null);
-            else if (stringId == 1)
-                return new NetworkString(true, false, string.Empty);
-            else
-            {
-                var stringSize = ReadInt();
-                var stringBytes = ReadBytes(stringSize);
-                var stringValue = encoding.GetString(stringBytes);
-
-                return new NetworkString(false, false, stringValue);
-            }
-        }
 
         public Version ReadVersion()
             => new Version(
@@ -438,36 +459,11 @@ namespace Networking.Data
         public Reader ReadReader()
         {
             var bytes = ReadBytes();
+            var reader = ReaderPool.Shared.Rent();
 
-            if (pool != null)
-                return pool.Next(bytes);
-            else
-            {
-                var reader = new Reader();
-                reader.FromPool(bytes);
-                return reader;
-            }
-        }
+            reader.SetData(bytes);
 
-        public int Read7BitEncodedInt()
-        {
-            var count = 0;
-            var shift = 0;
-
-            byte val;
-
-            do
-            {
-                if (shift == (5 * 7))
-                    throw new FormatException("Incorrect 7-bit int32 format");
-
-                val = ReadByte();
-                count |= (val & 0x7F) << shift;
-                shift += 7;
-            }
-            while ((val & 0x80) != 0);
-
-            return count;
+            return reader;
         }
 
         public void ClearBuffer()
@@ -491,14 +487,6 @@ namespace Networking.Data
             buffer.Clear();
         }
 
-        public void Return()
-        {
-            if (pool is null)
-                throw new InvalidOperationException($"Cannot return to an empty pool");
-
-            pool.Return(this);
-        }
-
         private void Move(int count)
         {
             if (offset >= data.Length || (offset + count > data.Length))
@@ -506,15 +494,11 @@ namespace Networking.Data
 
             buffer.Clear();
 
-            var current = offset;
-
             for (int i = 0; i < count; i++)
             {
                 buffer.Add(data[offset]);
                 offset++;
             }
-
-            OnMoved.Call(current, offset);
         }
     }
 }

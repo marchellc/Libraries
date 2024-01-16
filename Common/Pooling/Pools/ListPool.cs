@@ -1,132 +1,33 @@
-﻿using Common.Pooling.Buffers;
-
-using System;
-using System.Collections.Generic;
-using System.Linq;
+﻿using System.Collections.Generic;
 
 namespace Common.Pooling.Pools
 {
-    public class ListPool<TElement> : IPool<List<TElement>>
+    public class ListPool<TElement> : Pool<List<TElement>>
     {
-        public static ListPool<TElement> Shared { get; } 
+        public static ListPool<TElement> Shared { get; } = new ListPool<TElement>(10);
 
-        static ListPool()
+        public ListPool(uint size) : base(size) { }
+
+        public int MinSize { get; set; } = 256;
+
+        public override List<TElement> Construct()
+            => new List<TElement>(MinSize);
+
+        public List<TElement> Rent(IEnumerable<TElement> elements)
         {
-            Shared = new ListPool<TElement>(PoolOptions.NewOnMissing);
-            PoolHelper<List<TElement>>.SetPool(Shared, 15);
-        }
-
-        public ListPool(PoolOptions options, IPoolBuffer<List<TElement>> buffer = null)
-        {
-            Options = options;
-            Buffer = buffer ?? new BasicBuffer<List<TElement>>(this, () => new List<TElement>());
-        }
-
-        public PoolOptions Options { get; set; }
-
-        public IPoolBuffer<List<TElement>> Buffer { get; set; }
-
-        public List<TElement> Next()
-        {
-            if (Buffer is null)
-                throw new InvalidOperationException($"This pool's buffer is missing");
-
-            return Buffer.Get();
-        }
-
-        public List<TElement> Next(int size)
-        {
-            if (Buffer is null)
-                throw new InvalidOperationException($"This pool's buffer is missing");
-
-            var list = Buffer.Get();
-
-            if (list.Capacity < size)
-                list.Capacity = size;
-
+            var list = Rent();
+            list.AddRange(elements);
             return list;
         }
 
-        public List<TElement> Next(IEnumerable<TElement> elements)
+        public TElement[] ToArrayReturn(List<TElement> list)
         {
-            if (Buffer is null)
-                throw new InvalidOperationException($"This pool's buffer is missing");
-
-            if (elements is null)
-                throw new ArgumentNullException(nameof(elements));
-
-            var list = Buffer.Get();
-
-            if (elements != null)
-            {
-                var count = elements.Count();
-
-                if (count > 0)
-                {
-                    if (list.Capacity < count)
-                        list.Capacity = count;
-
-                    list.AddRange(elements);
-                }
-            }
-
-            return list;
-        }
-
-        public void Return(List<TElement> obj)
-        {
-            if (Buffer is null)
-                throw new InvalidOperationException($"This pool's buffer is missing");
-
-            if (obj is null)
-                return;
-
-            obj.Clear();
-
-            Buffer.Add(obj);
-        }
-
-        public TElement[] ToArrayReturn(List<TElement> obj)
-        {
-            if (Buffer is null)
-                throw new InvalidOperationException($"This pool's buffer is missing");
-
-            if (obj is null)
-                throw new ArgumentNullException(nameof(obj));
-
-            var array = new TElement[obj.Count];
-
-            for (int i = 0; i < obj.Count; i++)
-                array[i] = obj[i];
-
-            Return(obj);
-
+            var array = list.ToArray();
+            Return(list);
             return array;
         }
 
-        public void Clear()
-        {
-            if (Buffer is null)
-                throw new InvalidOperationException($"This pool's buffer is missing");
-
-            Buffer.Clear();
-            Buffer = null;
-
-            Options = default;
-        }
-
-        public void Initialize(int initialSize)
-        {
-            if (Buffer is null)
-                throw new InvalidOperationException($"This pool's buffer is missing");
-
-            if (initialSize > 0)
-            {
-                for (int i = 0; i < initialSize; i++)
-                {
-                    Buffer.AddNew();
-                }
-            }
-        }
+        public override void OnReturning(List<TElement> value)
+            => value.Clear();
     }
 }

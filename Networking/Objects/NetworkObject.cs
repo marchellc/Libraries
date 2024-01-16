@@ -25,7 +25,7 @@ namespace Networking.Objects
         public NetworkObject(NetworkManager manager)
         {
             this.manager = manager;
-            this.net = manager.net;
+            this.net = manager.Network;
             this.thisType = GetType();
             this.typeHash = this.thisType.GetTypeHash();
             this.netFields = new LockedDictionary<ushort, NetworkVariable>();
@@ -79,7 +79,7 @@ namespace Networking.Objects
         {
             if (!netFields.TryGetValue(syncMsg.hash, out var netVar))
             {
-                manager.log.Warn($"Received a sync message for an unknown network variable: {syncMsg.hash}");
+                manager.Log.Warn($"Received a sync message for an unknown network variable: {syncMsg.hash}");
                 return;
             }
 

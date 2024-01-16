@@ -114,7 +114,15 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Extensions\StackExtensions.cs" />
     <Compile Include="Extensions\StringBuilderExtensions.cs" />
+    <Compile Include="Patching\PatchAttribute.cs" />
+    <Compile Include="Patching\PatchInfo.cs" />
+    <Compile Include="Patching\PatchManager.cs" />
+    <Compile Include="Patching\PatchType.cs" />
+    <Compile Include="Patching\PatchUtils.cs" />
+    <Compile Include="Pooling\Pool.cs" />
+    <Compile Include="Utilities\ByteBuffer.cs" />
     <Compile Include="Utilities\CodeUtils.cs" />
     <Compile Include="Utilities\ConsoleArgs.cs" />
     <Compile Include="Attributes\AttributeCache.cs" />
@@ -167,21 +175,10 @@
     <Compile Include="Logging\LogMessage.cs" />
     <Compile Include="Logging\LogOutput.cs" />
     <Compile Include="Logging\LogUtils.cs" />
-    <Compile Include="Pooling\Buffers\BasicBuffer.cs" />
-    <Compile Include="Pooling\Buffers\PoolableBuffer.cs" />
-    <Compile Include="Pooling\DictionaryPoolManipulator.cs" />
-    <Compile Include="Pooling\IPool.cs" />
-    <Compile Include="Pooling\IPoolable.cs" />
-    <Compile Include="Pooling\IPoolBuffer.cs" />
     <Compile Include="Pooling\Poolable.cs" />
-    <Compile Include="Pooling\PoolExtensions.cs" />
-    <Compile Include="Pooling\PoolManipulator.cs" />
-    <Compile Include="Pooling\PoolOptions.cs" />
-    <Compile Include="Pooling\PoolHelper.cs" />
     <Compile Include="Pooling\Pools\DictionaryPool.cs" />
     <Compile Include="Pooling\Pools\HashSetPool.cs" />
     <Compile Include="Pooling\Pools\ListPool.cs" />
-    <Compile Include="Pooling\Pools\GeneralPool.cs" />
     <Compile Include="Pooling\Pools\PoolablePool.cs" />
     <Compile Include="Pooling\Pools\StringBuilderPool.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
@@ -195,6 +192,7 @@
     <Compile Include="Utilities\Exceptions\ExceptionUtils.cs" />
     <Compile Include="Utilities\Generator.cs" />
     <Compile Include="Utilities\IndexUtils.cs" />
+    <Compile Include="Utilities\Instruction.cs" />
     <Compile Include="Utilities\RegexUtils.cs" />
     <Compile Include="Utilities\TypeInstanceComparer.cs" />
     <Compile Include="Utilities\TypeInstanceValidator.cs" />
@@ -205,6 +203,7 @@
     <Compile Include="Values\IWrapper.cs" />
     <Compile Include="Values\RecordedValue.cs" />
     <Compile Include="Values\ReferenceValue.cs" />
+    <Compile Include="Values\StatusValue.cs" />
     <Compile Include="Values\WeakValue.cs" />
   </ItemGroup>
   <ItemGroup>

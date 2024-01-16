@@ -10,10 +10,10 @@ namespace Networking.Features
     {
         private Dictionary<Type, Action<object>> listeners = new Dictionary<Type, Action<object>>();
 
-        public bool isRunning;
+        public bool IsRunning { get; private set; }
 
-        public LogOutput log;
-        public NetworkFunctions net;
+        public LogOutput Log { get; private set; }
+        public NetworkFunctions Network { get; private set; }
 
         public virtual void Start() { }
         public virtual void Stop() { }
@@ -27,32 +27,33 @@ namespace Networking.Features
         public void Remove<TMessage>()
             => listeners.Remove(typeof(TMessage));
 
-        internal void InternalStart()
+        internal void InternalStart(NetworkFunctions network)
         {
-            if (isRunning)
+            if (IsRunning)
                 throw new InvalidOperationException($"This feature is already running");
+
+            IsRunning = true;
+
+            Network = network;
 
             try
             {
-                isRunning = true;
-
-                log = new LogOutput(GetType().Name.SpaceByUpperCase()).Setup();
-                log.Info($"Calling feature start ..");
+                Log = new LogOutput(GetType().Name.SpaceByUpperCase()).Setup();
 
                 Start();
             }
             catch (Exception ex)
             {
-                log?.Error(ex);
+                Log?.Error(ex);
             }
         }
 
         internal void InternalStop()
         {
-            if (!isRunning)
+            if (!IsRunning)
                 throw new InvalidOperationException($"This feature is not running");
 
-            isRunning = false;
+            IsRunning = false;
 
             try
             {
@@ -60,11 +61,13 @@ namespace Networking.Features
             }
             catch (Exception ex)
             {
-                log?.Error(ex);
+                Log?.Error(ex);
             }
 
-            log.Dispose();
-            log = null;
+            Log.Dispose();
+            Log = null;
+
+            Network = null;
 
             listeners.Clear();
         }

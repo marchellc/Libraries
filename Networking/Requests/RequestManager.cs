@@ -68,7 +68,7 @@ namespace Networking.Requests
 
             waitingRequests[requestId] = new Tuple<RequestInfo, Tuple<MethodInfo, object>>(requestInfo, new Tuple<MethodInfo, object>(responseHandler.Method, responseHandler.Target));
 
-            if (net.isServer)
+            if (net.IsServer)
                 CallRpcGetResponse(requestInfo);
             else
                 CallCmdGetResponse(requestInfo);
@@ -107,7 +107,7 @@ namespace Networking.Requests
             request.isResponded = true;
             request.isTimedOut = false;
 
-            if (net.isServer)
+            if (net.IsServer)
                 CallRpcSetResponse(request, responseInfo);
             else
                 CallCmdSetResponse(request, responseInfo);

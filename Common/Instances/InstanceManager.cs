@@ -97,7 +97,7 @@ namespace Common.Instances
                     continue;
                 }
 
-                if ((prop.PropertyType != type && !type.InheritsType(prop.PropertyType)))
+                if (prop.PropertyType != type && !type.InheritsType(prop.PropertyType))
                     continue;
 
                 instantiationListeners[type].Add(prop);

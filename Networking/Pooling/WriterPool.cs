@@ -1,48 +1,26 @@
 ﻿using Common.Pooling;
-using Common.Pooling.Buffers;
 
 using Networking.Data;
 
-using System;
+using System.Text;
 
 namespace Networking.Pooling
 {
-    public class WriterPool : IPool<Writer>
+    public class WriterPool : Pool<Writer>
     {
-        public PoolOptions Options { get; set; }
-        public IPoolBuffer<Writer> Buffer { get; set; } 
+        public static WriterPool Shared { get; } = new WriterPool(32);
 
-        public WriterPool()
-        {
-            Options = PoolOptions.NewOnMissing;
-            Buffer = new BasicBuffer<Writer>(this, () => new Writer());
-        }
+        public WriterPool(uint size) : base(size) { }
 
-        public Writer Next()
-        {
-            var writer = Buffer.Get();
+        public Encoding Encoding { get; set; } = Encoding.Default;
 
-            writer.pool = this;
-            writer.FromPool();
+        public override Writer Construct()
+            => new Writer(Encoding);
 
-            return writer;
-        }
+        public override void OnReturning(Writer value)
+            => value.OnDispose();
 
-        public void Return(Writer obj)
-        {
-            obj.ToPool();
-            obj.pool = this;
-
-            Buffer.Add(obj);
-        }
-
-        public void Clear()
-            => Buffer.Clear();
-
-        public void Initialize(int initialSize)
-        {
-            for (int i = 0; i < initialSize; i++)
-                Buffer.AddNew();
-        }
+        public override void OnRenting(Writer value)
+            => value.EnsureBuffer();
     }
 }

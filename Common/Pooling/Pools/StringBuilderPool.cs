@@ -1,91 +1,72 @@
-﻿using Common.Pooling.Buffers;
+﻿using Common.Extensions;
 
-using System;
+using System.Collections.Generic;
 using System.Text;
 
 namespace Common.Pooling.Pools
 {
-    public class StringBuilderPool : IPool<StringBuilder>
+    public class StringBuilderPool : Pool<StringBuilder>
     {
-        public static StringBuilderPool Shared { get; } = new StringBuilderPool(null, PoolOptions.NewOnMissing);
+        public static StringBuilderPool Shared { get; } = new StringBuilderPool(32);
 
-        public PoolOptions Options { get; set; }
+        public StringBuilderPool(uint size) : base(size) { }
 
-        public IPoolBuffer<StringBuilder> Buffer { get; set; }
+        public int MinSize { get; set; } = 512;
 
-        public StringBuilderPool(IPoolBuffer<StringBuilder> buffer, PoolOptions options)
+        public override StringBuilder Construct()
+            => new StringBuilder(MinSize);
+
+        public StringBuilder Rent(char lineSeparator, params string[] lines)
         {
-            Options = options;
-            Buffer = buffer ?? new BasicBuffer<StringBuilder>(this, () => new StringBuilder());
-        }
-
-        public void Clear()
-        {
-            if (Buffer is null)
-                throw new InvalidOperationException($"Pool buffer is null");
-        }
-
-        public void Initialize(int initialSize)
-        {
-            if (Buffer is null)
-                throw new InvalidOperationException($"Pool buffer is null");
-
-            if (initialSize < 1)
-                throw new ArgumentOutOfRangeException(nameof(initialSize));
-
-            for (int i = 0; i < initialSize; i++)
-                Buffer.AddNew();
-        }
-
-        public StringBuilder Next()
-        {
-            if (Buffer is null)
-                throw new InvalidOperationException($"Pool buffer is null");
-
-            return Buffer.Get();
-        }
-
-        public StringBuilder NextLines(params string[] lines)
-        {
-            if (Buffer is null)
-                throw new InvalidOperationException($"Pool buffer is null");
-
-            var next = Buffer.Get();
+            var builder = Rent();
 
             for (int i = 0; i < lines.Length; i++)
-                next.AppendLine(lines[i]);
+                builder.Append($"{lines[i]}{lineSeparator}");
 
-            return next;
+            return builder;
         }
 
-        public void Return(StringBuilder obj)
+        public StringBuilder Rent(char lineSeparator, IEnumerable<string> lines)
         {
-            if (Buffer is null)
-                throw new InvalidOperationException($"Pool buffer is null");
+            var builder = Rent();
 
-            if (obj is null)
-                throw new ArgumentNullException(nameof(obj));
+            foreach (var line in lines)
+                builder.Append($"{line}{lineSeparator}");
 
-            obj.Clear();
-
-            Buffer.Add(obj);
+            return builder;
         }
 
-        public string StringReturn(StringBuilder obj)
+        public StringBuilder Rent(int capacity)
         {
-            if (Buffer is null)
-                throw new InvalidOperationException($"Pool buffer is null");
+            var builder = Rent();
 
-            if (obj is null)
-                throw new ArgumentNullException(nameof(obj));
+            if (builder.Capacity < capacity)
+                builder.Capacity = capacity;
 
-            var str = obj.ToString();
+            return builder;
+        }
 
-            obj.Clear();
+        public StringBuilder Rent(params string[] lines)
+            => Rent('\n', lines);
 
-            Buffer.Add(obj);
+        public StringBuilder Rent(IEnumerable<string> lines)
+            => Rent('\n', lines);
 
+        public string[] ToArrayReturn(StringBuilder builder)
+        {
+            var str = builder.ToString();
+            Return(builder);
+            return str.SplitByLine();
+        }
+
+        public string ToStringReturn(StringBuilder builder)
+        {
+            var str = builder.ToString();
+            Return(builder);
             return str;
         }
+
+        public override void OnReturning(StringBuilder value)
+            => value.Clear();
     }
 }

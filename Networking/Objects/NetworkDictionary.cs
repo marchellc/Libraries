@@ -2,6 +2,7 @@
 using Common.IO.Collections;
 
 using Networking.Data;
+using Networking.Pooling;
 using Networking.Utilities;
 
 using System.Collections;
@@ -32,7 +33,7 @@ namespace Networking.Objects
             {
                 dict[key] = value;
 
-                var writer = parent.net.GetWriter();
+                var writer = WriterPool.Shared.Rent();
 
                 writer.Write(key);
                 writer.Write(value);
@@ -51,7 +52,7 @@ namespace Networking.Objects
         {
             dict.Add(key, value);
 
-            var writer = parent.net.GetWriter();
+            var writer = WriterPool.Shared.Rent();
 
             writer.Write(key);
             writer.Write(value);
@@ -63,7 +64,7 @@ namespace Networking.Objects
         {
             dict.Add(item);
 
-            var writer = parent.net.GetWriter();
+            var writer = WriterPool.Shared.Rent();
 
             writer.Write(item.Key);
             writer.Write(item.Value);
@@ -81,7 +82,7 @@ namespace Networking.Objects
         {
             if (dict.Remove(key))
             {
-                var writer = parent.net.GetWriter();
+                var writer = WriterPool.Shared.Rent();
 
                 writer.Write(key);
 
@@ -99,7 +100,7 @@ namespace Networking.Objects
 
             if (index != -1 && dict.Remove(item))
             {
-                var writer = parent.net.GetWriter();
+                var writer = WriterPool.Shared.Rent();
 
                 writer.Write(index);
 
@@ -211,27 +212,12 @@ namespace Networking.Objects
             if (this.writer != null)
             {
                 writer.WriteWriter(this.writer);
-
-                this.writer.Clear();
-
-                if (this.writer.pool != null)
-                    this.writer.Return();
-
+                WriterPool.Shared.Return(this.writer);
                 this.writer = null;
             }
         }
 
         public void FinishReader()
-        {
-            if (reader != null)
-            {
-                reader.Clear();
-
-                if (reader.pool != null)
-                    reader.Return();
-
-                reader = null;
-            }
-        }
+            => ReaderPool.Shared.Return(reader);
     }
 }

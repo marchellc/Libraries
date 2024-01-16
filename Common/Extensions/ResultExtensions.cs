@@ -118,7 +118,7 @@ namespace Common.Extensions
             }
 
             var index = 0;
-            var list = ListPool<TValue>.Shared.Next();
+            var list = ListPool<TValue>.Shared.Rent();
 
             foreach (var result in results)
             {

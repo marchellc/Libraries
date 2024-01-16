@@ -1,12 +1,10 @@
 ﻿using Common.Utilities;
+using Common.Pooling.Pools;
 
 using System;
 using System.Linq;
 using System.Collections;
 using System.Collections.Generic;
-
-using Common.Pooling.Pools;
-using Common.Pooling;
 
 using System.Threading.Tasks;
 
@@ -14,6 +12,22 @@ namespace Common.Extensions
 {
     public static class CollectionExtensions
     {
+        public static void ReturnToShared<T>(this List<T> list)
+            => ListPool<T>.Shared.Return(list);
+
+        public static void ReturnToShared<T>(this HashSet<T> set)
+            => HashSetPool<T>.Shared.Return(set);
+
+        public static void ExternalModify<T>(this IList<T> collection, Action<T, IList<T>> action)
+        {
+            var copy = ListPool<T>.Shared.Rent(collection);
+
+            foreach (var item in copy)
+                action.Call(item, collection);
+
+            copy.ReturnToShared();
+        }
+
         public static async Task<List<T>> ToListAsync<T>(this IAsyncEnumerable<T> values)
         {
             var list = new List<T>();
@@ -46,7 +60,7 @@ namespace Common.Extensions
 
         public static void Shuffle<T>(this ICollection<T> source)
         {
-            var copy = ListPool<T>.Shared.Next(source);
+            var copy = ListPool<T>.Shared.Rent(source);
             var size = copy.Count;
 
             while (size > 1)
@@ -65,7 +79,7 @@ namespace Common.Extensions
             foreach (var value in copy) 
                 source.Add(value);
 
-            copy.Return();
+            copy.ReturnToShared();
         }
 
         public static void AddRange(this IList destination, IEnumerable source)

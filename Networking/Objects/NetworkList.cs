@@ -2,6 +2,7 @@
 using Common.Utilities;
 
 using Networking.Data;
+using Networking.Pooling;
 using Networking.Utilities;
 
 using System.Collections;
@@ -35,7 +36,7 @@ namespace Networking.Objects
         {
             list.Add(item);
 
-            var writer = parent.net.GetWriter();
+            var writer = WriterPool.Shared.Rent();
 
             writer.Write(item);
 
@@ -54,7 +55,7 @@ namespace Networking.Objects
             {
                 list[index] = item;
 
-                var writer = parent.net.GetWriter();
+                var writer = WriterPool.Shared.Rent();
 
                 writer.WriteInt(index);
                 writer.Write(item);
@@ -72,7 +73,7 @@ namespace Networking.Objects
 
             if (list.Remove(item))
             {
-                var writer = parent.net.GetWriter();
+                var writer = WriterPool.Shared.Rent();
 
                 writer.WriteInt(index);
 
@@ -90,7 +91,7 @@ namespace Networking.Objects
             {
                 list.RemoveAt(index);
 
-                var writer = parent.net.GetWriter();
+                var writer = WriterPool.Shared.Rent();
 
                 writer.WriteInt(index);
 
@@ -192,27 +193,12 @@ namespace Networking.Objects
             if (this.writer != null)
             {
                 writer.WriteWriter(this.writer);
-
-                this.writer.Clear();
-
-                if (this.writer.pool != null)
-                    this.writer.Return();
-
+                WriterPool.Shared.Return(this.writer);
                 this.writer = null;
             }
         }
 
         public void FinishReader()
-        {
-            if (reader != null)
-            {
-                reader.Clear();
-
-                if (reader.pool != null)
-                    reader.Return();
-
-                reader = null;
-            }
-        }
+            => ReaderPool.Shared.Return(reader);
     }
 }

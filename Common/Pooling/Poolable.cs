@@ -1,15 +1,42 @@
-﻿namespace Common.Pooling
+﻿using Common.Extensions;
+using Common.Pooling.Pools;
+
+using Fasterflect;
+
+using System.Reflection;
+
+namespace Common.Pooling
 {
-    public class Poolable : IPoolable
+    public class PoolableItem
     {
-        private bool _pooled;
+        private readonly object poolInstance;
+        private readonly MethodInfo poolMethod;
 
-        public bool IsPooled => _pooled;
+        public PoolableItem()
+        {
+            var thisType = this.GetType();
+            var poolType = typeof(PoolablePool<>).MakeGenericType(thisType);
 
-        public virtual void OnAdded()
-            => _pooled = true;
+            poolInstance = poolType.Property("Shared").GetValueFast<object>();
+            poolMethod = Extensions.TypeExtensions.Method(poolType, "Return");
+        }
 
-        public virtual void OnRemoved()
-            => _pooled = false;
+        internal bool isPooled;
+
+        public bool IsPooled
+        {
+            get => isPooled;
+        }
+
+        public virtual void OnPooled() { }
+        public virtual void OnUnPooled() { }
+
+        public void ToPool()
+        {
+            if (isPooled)
+                return;
+
+            poolMethod.Call(poolInstance, this);
+        }
     }
 }

@@ -2,126 +2,140 @@
 using Common.IO.Collections;
 using Common.Logging;
 using Common.Utilities;
+
 using Networking.Features;
 using Networking.Utilities;
+
 using System;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace Networking.Server
 {
     public class NetworkServer
     {
-        public LogOutput log;
-        public Telepathy.Server server;
+        private readonly LockedDictionary<int, NetworkConnection> connections = new LockedDictionary<int, NetworkConnection>();
+        private readonly LockedList<Type> features = new LockedList<Type>();
 
-        public LockedDictionary<int, NetworkConnection> connections;
-        public LockedList<Type> requestFeatures;
+        public LogOutput Log { get; }
+        public ClientConfig Config { get; } = new ClientConfig();
 
-        public int port = 8000;
+        public Telepathy.Server ApiServer { get; private set; }
 
-        public bool isRunning;
-        public bool isNoDelay = true;
+        public IReadOnlyDictionary<int, NetworkConnection> Connections
+        {
+            get => connections.ToDictionary();
+        }
+
+        public IReadOnlyList<Type> Features
+        {
+            get => features.ToList();
+        }
+
+        public int Port { get; set; } = 8000;
+        public int MaxConnections { get; set; } = -1;
+
+        public bool IsRunning { get; private set; }
 
         public event Action OnStarted;
         public event Action OnStopped;
+
         public event Action<NetworkConnection> OnConnected;
         public event Action<NetworkConnection> OnDisconnected;
         public event Action<NetworkConnection, byte[]> OnData;
 
-        public static readonly Version version;
-        public static readonly NetworkServer instance;
+        public static Version ServerVersion { get; }
+        public static NetworkServer Instance { get; }
 
         static NetworkServer()
         {
-            version = new Version(1, 0, 0, 0);
-            instance = new NetworkServer();
+            ServerVersion = new Version(1, 0, 0, 0);
+            Instance = new NetworkServer();
 
             TypeLoader.Init();
         }
 
         public NetworkServer(int port = 8000)
         {
-            this.log = new LogOutput($"Network Server ({port})");
-            this.log.Setup();
+            Log = new LogOutput($"Network Server ({port})");
+            Log.Setup();
 
-            this.port = port;
-
-            this.connections = new LockedDictionary<int, NetworkConnection>();
-            this.requestFeatures = new LockedList<Type>();
+            Port = port;
         }
 
         public void Start()
         {
-            if (isRunning)
+            if (IsRunning)
                 Stop();
 
-            log.Info($"Starting the server ..");
+            Log.Info($"Starting the server ..");
 
             try
             {
-                this.server = new Telepathy.Server(1024 * 1024 * 10);
-                this.server.NoDelay = true;
+                ApiServer = new Telepathy.Server(1024 * 1024 * 10);
+                ApiServer.NoDelay = true;
 
-                this.server.OnConnected = OnClientConnected;
-                this.server.OnDisconnected = OnClientDisconnected;
-                this.server.OnData = OnClientData;
+                ApiServer.OnConnected = OnClientConnected;
+                ApiServer.OnDisconnected = OnClientDisconnected;
+                ApiServer.OnData = OnClientData;
 
-                this.isRunning = true;
+                IsRunning = true;
 
-                CodeUtils.WhileTrue(() => isRunning, () =>
+                CodeUtils.WhileTrue(() => IsRunning, () =>
                 {
-                    this.server.Tick(100);
+                    ApiServer.Tick(100);
                 }, 100);
 
-                this.server.Start(port);
+                ApiServer.Start(Port);
 
                 OnStarted.Call();
 
-                log.Info($"Server started.");
+                Log.Info($"Server started.");
             }
             catch (Exception ex)
             {
-                log.Error(ex);
+                Log.Error(ex);
             }
         }
 
         public void Stop()
         {
-            if (!isRunning)
+            if (!IsRunning)
                 throw new InvalidOperationException($"The server is not running!");
 
-            log.Info($"Stopping the server ..");
+            Log.Info($"Stopping the server ..");
 
-            this.server.Stop();
+            ApiServer.Stop();
 
-            this.server.OnConnected = null;
-            this.server.OnDisconnected = null;
-            this.server.OnData = null;
+            ApiServer.OnConnected = null;
+            ApiServer.OnDisconnected = null;
+            ApiServer.OnData = null;
 
-            this.server.NoDelay = false;
+            ApiServer.NoDelay = false;
 
-            this.server = null;
+            ApiServer = null;
 
-            this.isRunning = false;
+            IsRunning = false;
 
             OnStopped.Call();
 
-            log.Info($"Server stopped.");
+            Log.Info($"Server stopped.");
         }
 
         public void Add<T>() where T : NetworkFeature
         {
-            if (requestFeatures.Contains(typeof(T)))
+            if (features.Contains(typeof(T)))
                 return;
 
-            requestFeatures.Add(typeof(T));
+            features.Add(typeof(T));
 
-            log.Trace($"Added feature: {typeof(T).FullName}");
+            Log.Verbose($"Added feature: {typeof(T).FullName}");
         }
 
         public void Remove<T>() where T : NetworkFeature
         {
-            if (requestFeatures.Remove(typeof(T)))
-                log.Trace($"Removed feature: {typeof(T).FullName}");
+            if (features.Remove(typeof(T)))
+                Log.Trace($"Removed feature: {typeof(T).FullName}");
         }
 
         private void OnClientData(int connId, ArraySegment<byte> data)
@@ -129,7 +143,7 @@ namespace Networking.Server
             if (!connections.TryGetValue(connId, out var connection))
                 return;
 
-            log.Trace($"Received client data connId={connId}");
+            Log.Verbose($"Received client data connId={connId}");
 
             var array = data.ToArray();
 
@@ -140,13 +154,28 @@ namespace Networking.Server
 
         private void OnClientConnected(int connId)
         {
-            var connection = new NetworkConnection(connId, this, isNoDelay);
+            if (MaxConnections > 0 && connections.Count >= MaxConnections)
+            {
+                ApiServer.Disconnect(connId);
+                return;
+            }
 
-            connections[connId] = connection;
+            CodeUtils.Delay(() =>
+            {
 
-            OnConnected.Call(connection);
+                var connection = new NetworkConnection(connId, this);
 
-            log.Info($"Client connected from {connection.remote} connId={connId}");
+                connection.Config.MaxReconnectionAttempts = Config.MaxReconnectionAttempts;
+
+                connection.Config.OutgoingAmount = Config.OutgoingAmount;
+                connection.Config.IncomingAmount = Config.IncomingAmount;
+
+                connections[connId] = connection;
+
+                OnConnected.Call(connection);
+
+                Log.Info($"Client connected from {connection.EndPoint} connId={connId}");
+            }, 250);
         }
 
         private void OnClientDisconnected(int connId)
@@ -156,13 +185,20 @@ namespace Networking.Server
 
             OnDisconnected.Call(connection);
 
-            var remoteStr = connection.remote.ToString();
+            var remoteStr = connection.EndPoint.ToString();
 
-            connection.Stop();
+            try
+            {
+                connection.Stop();
+            }
+            catch (Exception ex)
+            {
+                Log.Error($"Failed to stop the network connection!\n{ex}");
+            }
 
             connections.Remove(connId);
 
-            log.Info($"Client disconnected from {remoteStr} connId={connId}");
+            Log.Info($"Client disconnected from {remoteStr} connId={connId}");
         }
     }
 }
