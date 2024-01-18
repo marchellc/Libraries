@@ -7,7 +7,7 @@ namespace Common.Utilities
 {
     public static class Assert
     {
-        public static bool IsForced;
+        public static bool IsForced = ConsoleArgs.HasSwitch("useAssert");
 
         public static bool IsEnabled => IsForced || ModuleInitializer.IsDebugBuild;
 

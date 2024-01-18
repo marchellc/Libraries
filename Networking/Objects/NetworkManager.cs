@@ -397,72 +397,95 @@ namespace Networking.Objects
                 var types = new List<Type>();
 
                 foreach (var assembly in assemblies)
-                    types.AddRange(assembly.GetTypes());
+                {
+                    try
+                    {
+                        types.AddRange(assembly.GetTypes());
+                    }
+                    catch (ReflectionTypeLoadException reflectionEx)
+                    {
+                        Log.Error($"A type-load exception occured while loading types from assembly '{assembly.FullName}':\n{reflectionEx}");
+
+                        foreach (var ex in reflectionEx.LoaderExceptions)
+                            Log.Error(ex);
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Error($"An error occured while adding types from assembly '{assembly.FullName}':\n{ex}");
+                    }
+                }
 
                 foreach (var type in types)
                 {
-                    if (type != typeof(NetworkObject) && type.IsSubclassOf(typeof(NetworkObject))
-                        && type.GetAllConstructors().Any(c => c.Parameters().Length == 1 && !type.ContainsGenericParameters))
+                    try
                     {
-                        netTypes[type.GetTypeHash()] = type;
-
-                        foreach (var property in type.GetAllProperties())
+                        if (type != typeof(NetworkObject) && type.IsSubclassOf(typeof(NetworkObject))
+                            && type.GetAllConstructors().Any(c => c.Parameters().Length == 1 && !type.ContainsGenericParameters))
                         {
-                            if (property.Name.StartsWith("Network") && property.GetGetMethod(true) != null && property.GetSetMethod(true) != null
-                                && !property.GetGetMethod(true).IsStatic && !property.GetSetMethod(true).IsStatic && TypeLoader.GetWriter(property.PropertyType) != null
-                                && TypeLoader.GetReader(property.PropertyType) != null)
+                            netTypes[type.GetTypeHash()] = type;
+
+                            foreach (var property in type.GetAllProperties())
                             {
-                                netProperties[property.GetPropertyHash()] = property;
-                                netHashes[$"{property.DeclaringType.Name}.{property.Name}Hash"] = property.GetPropertyHash();
-                            }
-                        }
-
-                        foreach (var field in type.GetAllFields())
-                        {
-                            if (!field.IsStatic && field.Name.StartsWith("network") && field.FieldType.InheritsType<NetworkVariable>() && !field.IsInitOnly)
-                            {
-                                netFields[field.GetFieldHash()] = field;
-                                netHashes[$"{field.DeclaringType.Name}.{field.Name}Hash"] = field.GetFieldHash();
-                            }
-                        }
-
-                        foreach (var method in type.GetAllMethods())
-                        {
-                            if (!method.IsStatic && (method.Name.StartsWith("Cmd") || method.Name.StartsWith("Rpc")) && method.ReturnType == typeof(void))
-                            {
-                                netMethods[method.GetMethodHash()] = method;
-                                netHashes[$"{method.DeclaringType.Name}.{method.Name}Hash"] = method.GetMethodHash();
-
-                                var methodFieldName = $"{method.Name}Hash";
-
-                                foreach (var field in type.GetAllFields())
+                                if (property.Name.StartsWith("Network") && property.GetGetMethod(true) != null && property.GetSetMethod(true) != null
+                                    && !property.GetGetMethod(true).IsStatic && !property.GetSetMethod(true).IsStatic && TypeLoader.GetWriter(property.PropertyType) != null
+                                    && TypeLoader.GetReader(property.PropertyType) != null)
                                 {
-                                    if (field.Name != methodFieldName || field.FieldType != typeof(ushort) || !field.IsStatic || field.IsInitOnly)
-                                        continue;
-
-                                    field.SetValueFast(method.GetMethodHash());
+                                    netProperties[property.GetPropertyHash()] = property;
+                                    netHashes[$"{property.DeclaringType.Name}.{property.Name}Hash"] = property.GetPropertyHash();
                                 }
                             }
-                        }
 
-                        foreach (var ev in type.GetAllEvents())
-                        {
-                            if (ev.Name.StartsWith("Network"))
+                            foreach (var field in type.GetAllFields())
                             {
-                                netEvents[ev.GetEventHash()] = ev;
-                                netHashes[$"{ev.DeclaringType.Name}.{ev.Name}Hash"] = ev.GetEventHash();
-
-                                var eventFieldName = $"{ev.Name}Hash";
-
-                                foreach (var field in type.GetAllFields())
+                                if (!field.IsStatic && field.Name.StartsWith("network") && field.FieldType.InheritsType<NetworkVariable>() && !field.IsInitOnly)
                                 {
-                                    if (field.Name != eventFieldName || field.FieldType != typeof(ushort) || !field.IsStatic || field.IsInitOnly)
-                                        continue;
-
-                                    field.SetValueFast(ev.GetEventHash());
+                                    netFields[field.GetFieldHash()] = field;
+                                    netHashes[$"{field.DeclaringType.Name}.{field.Name}Hash"] = field.GetFieldHash();
                                 }
                             }
-                        }
+
+                            foreach (var method in type.GetAllMethods())
+                            {
+                                if (!method.IsStatic && (method.Name.StartsWith("Cmd") || method.Name.StartsWith("Rpc")) && method.ReturnType == typeof(void))
+                                {
+                                    netMethods[method.GetMethodHash()] = method;
+                                    netHashes[$"{method.DeclaringType.Name}.{method.Name}Hash"] = method.GetMethodHash();
+
+                                    var methodFieldName = $"{method.Name}Hash";
+
+                                    foreach (var field in type.GetAllFields())
+                                    {
+                                        if (field.Name != methodFieldName || field.FieldType != typeof(ushort) || !field.IsStatic || field.IsInitOnly)
+                                            continue;
+
+                                        field.SetValueFast(method.GetMethodHash());
+                                    }
+                                }
+                            }
+
+                            foreach (var ev in type.GetAllEvents())
+                            {
+                                if (ev.Name.StartsWith("Network"))
+                                {
+                                    netEvents[ev.GetEventHash()] = ev;
+                                    netHashes[$"{ev.DeclaringType.Name}.{ev.Name}Hash"] = ev.GetEventHash();
+
+                                    var eventFieldName = $"{ev.Name}Hash";
+
+                                    foreach (var field in type.GetAllFields())
+                                    {
+                                        if (field.Name != eventFieldName || field.FieldType != typeof(ushort) || !field.IsStatic || field.IsInitOnly)
+                                            continue;
+
+                                        field.SetValueFast(ev.GetEventHash());
+                                    }
+                                }
+                            }
+                        }                    
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Error($"An error occured while traversing type '{type.FullName}':\n{ex}");
                     }
                 }
 

@@ -1,9 +1,8 @@
 ﻿<Weavers xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="FodyWeavers.xsd">
-  <ModuleInit />
   <Costura>
     <Costura CreateTemporaryAssemblies='true' />
     <Costura IncludeDebugSymbols='true' />
     <Costura IncludeRuntimeReferences='false' />
-    <Costura ExcludeAssemblies='System*' />
+    <Costura ExcludeAssemblies='System*|Common' />
   </Costura>
 </Weavers>

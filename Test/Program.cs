@@ -4,6 +4,7 @@ using Common.Utilities;
 
 using Networking.Client;
 using Networking.Objects;
+using Networking.Pinging;
 using Networking.Server;
 
 using System;
@@ -17,6 +18,8 @@ namespace Test
         public static async Task Main(string[] args)
         {
             var log = LogOutput.Common;
+
+            /*
             var isServer = ConsoleArgs.HasSwitch("server");
 
             if (isServer)
@@ -33,13 +36,12 @@ namespace Test
 
                 log.Info($"Port: {serverPortValue}");
 
-                NetworkServer.instance.port = serverPortValue;
+                NetworkServer.Instance.Port = serverPortValue;
 
-                NetworkServer.instance.Add<NetworkManager>();
+                NetworkServer.Instance.Add<NetworkManager>();
+                NetworkServer.Instance.Start();
 
-                NetworkServer.instance.Start();
-
-                NetworkServer.instance.OnConnected += conn =>
+                NetworkServer.Instance.OnConnected += conn =>
                 {
                     CodeUtils.Delay(() =>
                     {
@@ -68,9 +70,20 @@ namespace Test
 
                 log.Info($"Port: {clientPortValue}");
 
-                NetworkClient.instance.Add<NetworkManager>();
-                NetworkClient.instance.Connect(new IPEndPoint(IPAddress.Loopback, clientPortValue));
+                NetworkClient.Instance.Add<NetworkManager>();
+                NetworkClient.Instance.Connect(new IPEndPoint(IPAddress.Loopback, clientPortValue));
             }
+            */
+
+            ConsoleCommands.Add("ping", cmdArgs =>
+            {
+                if (cmdArgs.Length != 1)
+                    return "Missing arguments! ping <host>";
+
+                PingUtils.PingThread(cmdArgs[0], res => log.Info(res), 50, 100);
+
+                return "Ping in progress ..";
+            });
 
             await Task.Delay(-1);
         }
@@ -102,12 +115,12 @@ namespace Test
 
         private void OnStringEvent(string str)
         {
-            manager.log.Info($"String Event: {str}");
+            manager.Log.Info($"String Event: {str}");
         }
 
         private void OnEvent()
         {
-            manager.log.Info("Event");
+            manager.Log.Info("Event");
         }
     }
 }

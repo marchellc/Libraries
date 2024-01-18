@@ -10,6 +10,8 @@ using System;
 using System.Diagnostics;
 using System.Reflection;
 using System.Linq;
+using System.Globalization;
+using System.Threading;
 
 namespace Common
 {
@@ -69,6 +71,16 @@ namespace Common
 
                 if (IsDebugBuild || ConsoleArgs.HasSwitch("debug"))
                     LogOutput.Common.Enable(LogLevel.Debug);
+
+                if (ConsoleArgs.HasSwitch("invariantCulture"))
+                {
+                    try
+                    {
+                        Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
+                        Thread.CurrentThread.CurrentUICulture = CultureInfo.InvariantCulture;
+                    }
+                    catch { }
+                }
 
                 LogOutput.Common.Info("Initializing Attribute Manager ..");
 

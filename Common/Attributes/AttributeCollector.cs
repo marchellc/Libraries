@@ -196,9 +196,7 @@ namespace Common.Attributes
         private static void OnAssembly(object _, AssemblyLoadEventArgs ev)
         {
             if (ev.LoadedAssembly != null)
-            {
-                CodeUtils.OnThread(() => Collect(ev.LoadedAssembly));
-            }
+                Collect(ev.LoadedAssembly);
         }
     }
 }

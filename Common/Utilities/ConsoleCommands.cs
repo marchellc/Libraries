@@ -1,12 +1,11 @@
 ﻿using Common.IO.Collections;
 using Common.Logging;
 using Common.Extensions;
-using Common.Utilities;
 
 using System;
 using System.Linq;
 
-namespace Common
+namespace Common.Utilities
 {
     public static class ConsoleCommands
     {

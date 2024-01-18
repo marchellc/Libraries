@@ -69,34 +69,62 @@ namespace Networking.Utilities
 
             foreach (var assembly in assemblies)
             {
-                foreach (var type in assembly.GetTypes())
+                try
                 {
-                    foreach (var method in type.GetAllMethods())
+                    foreach (var type in assembly.GetTypes())
                     {
-                        if (!method.IsStatic)
-                            continue;
-
-                        var methodParams = method.Parameters();
-
-                        if (method.ReturnType != typeof(void) && methodParams.Length == 2 && methodParams[0].ParameterType == readerType)
+                        try
                         {
-                            if (readers.ContainsKey(method.ReturnType))
-                                continue;
+                            foreach (var method in type.GetAllMethods())
+                            {
+                                try
+                                {
+                                    if (!method.IsStatic)
+                                        continue;
 
-                            readers[method.ReturnType] = reader => method.Call(null, reader);
+                                    var methodParams = method.Parameters();
 
-                            Log.Debug($"Cached custom reader: {method.ReturnType.FullName} ({method.ToName()})");
+                                    if (method.ReturnType != typeof(void) && methodParams.Length == 2 && methodParams[0].ParameterType == readerType)
+                                    {
+                                        if (readers.ContainsKey(method.ReturnType))
+                                            continue;
+
+                                        readers[method.ReturnType] = reader => method.Call(null, reader);
+
+                                        Log.Debug($"Cached custom reader: {method.ReturnType.FullName} ({method.ToName()})");
+                                    }
+                                    else if (method.ReturnType == typeof(void) && methodParams.Length == 1 && methodParams[0].ParameterType == typeof(Writer))
+                                    {
+                                        if (writers.ContainsKey(methodParams[0].ParameterType))
+                                            continue;
+
+                                        writers[methodParams[0].ParameterType] = (writer, value) => method.Call(null, writer, value);
+
+                                        Log.Debug($"Cached custom writer: {methodParams[0].ParameterType.FullName} ({method.ToName()})");
+                                    }
+                                }
+                                catch (Exception ex)
+                                {
+                                    Log.Error($"Caught an exception while traversing method '{method.Name}' in '{type.FullName}':\n{ex}");
+                                }
+                            }
                         }
-                        else if (method.ReturnType == typeof(void) && methodParams.Length == 1 && methodParams[0].ParameterType == typeof(Writer))
+                        catch (Exception ex)
                         {
-                            if (writers.ContainsKey(methodParams[0].ParameterType))
-                                continue;
-
-                            writers[methodParams[0].ParameterType] = (writer, value) => method.Call(null, writer, value);
-
-                            Log.Debug($"Cached custom writer: {methodParams[0].ParameterType.FullName} ({method.ToName()})");
+                            Log.Error($"Caught an exception while traversing type '{type.FullName}':\n{ex}");
                         }
                     }
+                }
+                catch (ReflectionTypeLoadException reflectionEx)
+                {
+                    Log.Error($"Caught a type load exception while loading types:");
+
+                    foreach (var type in reflectionEx.LoaderExceptions)
+                        Log.Error(type);
+                }
+                catch (Exception ex)
+                {
+                    Log.Error($"Caught an exception while traversing assembly '{assembly.FullName}':\n{ex}");
                 }
             }
 

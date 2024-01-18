@@ -1,14 +1,14 @@
 ﻿using Common.Logging;
+using Common.Utilities;
 
 using System;
-using static System.Collections.Specialized.BitVector32;
 
 namespace Common.Extensions
 {
     public static class DelegateExtensions
     {
         public static LogOutput log = new LogOutput("Delegate Extensions").Setup();
-        public static bool isLogging;
+        public static bool isLogging = ModuleInitializer.IsDebugBuild || ConsoleArgs.HasSwitch("delegateLogger");
 
         public static void Call(this Action action, Action callback = null, Action<Exception> errorCallback = null)
         {

@@ -8,7 +8,6 @@ using Fasterflect;
 using MonoMod.Utils;
 
 using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
@@ -155,6 +154,14 @@ namespace Common.Extensions
         {
             try
             {
+                if (method is MethodInfo info)
+                {
+                    var invoker = HarmonyLib.MethodInvoker.GetHandler(info);
+
+                    if (invoker != null)
+                        return invoker(instance, args);
+                }
+
                 return method.Invoke(instance, args);
             }
             catch (Exception ex)
