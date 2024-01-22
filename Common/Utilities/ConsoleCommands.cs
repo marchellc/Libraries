@@ -44,11 +44,11 @@ namespace Common.Utilities
 
                 var cmd = split[0].ToLower();
 
-                log.Raw($">>> {cmd.ToUpper()}", ConsoleColor.Magenta);
+                LogOutput.Raw($">>> {cmd.ToUpper()}", ConsoleColor.Magenta);
 
                 if (!commands.TryGetValue(cmd, out var callback))
                 {
-                    log.Raw(">>> No such command.", ConsoleColor.Red);
+                    LogOutput.Raw(">>> No such command.", ConsoleColor.Red);
                     return;
                 }
 
@@ -56,11 +56,11 @@ namespace Common.Utilities
 
                 if (string.IsNullOrWhiteSpace(output))
                 {
-                    log.Raw(">>> No output from command.", ConsoleColor.DarkYellow);
+                    LogOutput.Raw(">>> No output from command.", ConsoleColor.DarkYellow);
                     return;
                 }
 
-                log.Raw($">>> {output}", ConsoleColor.Green);
+                LogOutput.Raw($">>> {output}", ConsoleColor.Green);
             }
             catch (Exception ex)
             {

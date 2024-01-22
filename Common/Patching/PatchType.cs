@@ -12,7 +12,5 @@
         Finalizer,
 
         Reverse,
-
-        IlManipulator
     }
 }

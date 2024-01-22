@@ -1,14 +1,12 @@
-﻿using Common.Logging;
-
+﻿using Common.Extensions;
+using Common.Logging;
+using Common.Patching;
 using Common.Utilities;
 
-using Networking.Client;
-using Networking.Objects;
-using Networking.Pinging;
-using Networking.Server;
+using Networking.Http;
 
 using System;
-using System.Net;
+using System.Net.Http;
 using System.Threading.Tasks;
 
 namespace Test
@@ -17,110 +15,67 @@ namespace Test
     {
         public static async Task Main(string[] args)
         {
-            var log = LogOutput.Common;
+            LogOutput.Raw("before patching");
+
+            method();
+
+            LogOutput.Raw("patching");
+
+            PatchManager.Patch<Func<bool>>(typeof(Program).Method("method"), () => patchmethod(), PatchType.Prefix);
+
+            LogOutput.Raw("after patching");
+
+            method();
 
             /*
-            var isServer = ConsoleArgs.HasSwitch("server");
-
-            if (isServer)
+            try
             {
-                log.Info("Starting server ..");
+                var log = new LogOutput("Test").Setup();
 
-                var serverPort = ConsoleArgs.GetValue("port");
+                var step = 0;
 
-                if (!int.TryParse(serverPort, out var serverPortValue))
+                step++;
+                log.Info(step);
+
+                var server = new HttpServer();
+
+                step++;
+                log.Info(step);
+
+                server.Start("http://127.0.0.1/");
+
+                step++;
+                log.Info(step);
+
+                CodeUtils.Delay(() =>
                 {
-                    log.Info("Invalid server port");
-                    await Task.Delay(-1);
-                }
-
-                log.Info($"Port: {serverPortValue}");
-
-                NetworkServer.Instance.Port = serverPortValue;
-
-                NetworkServer.Instance.Add<NetworkManager>();
-                NetworkServer.Instance.Start();
-
-                NetworkServer.Instance.OnConnected += conn =>
-                {
-                    CodeUtils.Delay(() =>
+                    var id = server.CreateRoute(ctx =>
                     {
-                        var netManager = conn.Get<NetworkManager>();
+                        ctx.RespondOk("test");
+                        return Task.CompletedTask;
+                    }, HttpMethod.Get, "/test", "A test route");
 
-                        netManager.OnInitialized += () =>
-                        {
-                            var testObj = netManager.Get<TestObject>();
+                    log.Info($"Created route ID: {id}");
+                }, 100);
 
-                            testObj.Raise();
-                        };
-                    }, 100);
-                };
+                step++;
+                log.Info(step);
             }
-            else
+            catch (Exception ex)
             {
-                log.Info("Starting client ..");
-
-                var clientPort = ConsoleArgs.GetValue("port");
-
-                if (!int.TryParse(clientPort, out var clientPortValue))
-                {
-                    log.Info("Invalid client port");
-                    await Task.Delay(-1);
-                }
-
-                log.Info($"Port: {clientPortValue}");
-
-                NetworkClient.Instance.Add<NetworkManager>();
-                NetworkClient.Instance.Connect(new IPEndPoint(IPAddress.Loopback, clientPortValue));
+                LogOutput.Common.Error(ex);
             }
             */
 
-            ConsoleCommands.Add("ping", cmdArgs =>
-            {
-                if (cmdArgs.Length != 1)
-                    return "Missing arguments! ping <host>";
-
-                PingUtils.PingThread(cmdArgs[0], res => log.Info(res), 50, 100);
-
-                return "Ping in progress ..";
-            });
-
             await Task.Delay(-1);
         }
-    }
 
-    public class TestObject : NetworkObject
-    {
-        public TestObject(NetworkManager manager) : base(manager)
+        public static bool patchmethod()
         {
+            LogOutput.Raw("patch method");
+            return false;
         }
 
-        public event Action NetworkEventTest;
-        public event Action<string> NetworkStringEventTest;
-
-        private static ushort NetworkEventTestHash;
-        private static ushort NetworkStringEventTestHash;
-
-        public override void OnStart()
-        {
-            NetworkEventTest += OnEvent;
-            NetworkStringEventTest += OnStringEvent;
-        }
-
-        public void Raise()
-        {
-            SendEvent(NetworkEventTestHash, true);
-            SendEvent(NetworkStringEventTestHash, true, Generator.Instance.GetString());
-        }
-
-        private void OnStringEvent(string str)
-        {
-            manager.Log.Info($"String Event: {str}");
-        }
-
-        private void OnEvent()
-        {
-            manager.Log.Info("Event");
-        }
+        public static void method() => LogOutput.Raw("method");
     }
 }

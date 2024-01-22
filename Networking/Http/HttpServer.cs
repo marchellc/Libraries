@@ -12,12 +12,16 @@ using Microsoft.Extensions.Logging;
 
 using System;
 using System.IO;
+using System.Linq;
 using System.Reflection;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 
 using LogLevel = Microsoft.Extensions.Logging.LogLevel;
+
+using ServiceCollection = Microsoft.Extensions.DependencyInjection.ServiceCollection;
 
 namespace Networking.Http
 {
@@ -52,63 +56,78 @@ namespace Networking.Http
         public HttpAuthentificator Authentificator { get; set; } = new HttpAuthentificator();
         public LogOutput Log { get; set; } = new LogOutput("Http Server").Setup();
 
+        public void Start(IEnumerable<string> prefixes)
+            => Start(prefixes?.ToArray() ?? Array.Empty<string>());
+
         public void Start(params string[] prefixes)
         {
+            if (prefixes.Length == 0)
+                throw new InvalidOperationException($"You need to specify at least one prefix to start the server.");
+
             if (IsRunning)
                 Stop();
 
             while (stopReq)
                 continue;
 
-            var collection = new ServiceCollection();
-            var logger = new HttpLogger();
-
-            if (Log != null)
-                logger.Output = Log;
-
-            collection.AddSingleton(typeof(IConfiguration), defaultConfig);
-
-            collection.AddSingleton<IRestServer, RestServer>();
-            collection.AddSingleton<IRouter, Router>();
-            collection.AddSingleton<IRouteScanner, RouteScanner>();
-
-            collection.AddTransient<IContentFolder, ContentFolder>();
-
-            collection.AddLogging(b => b.AddProvider(logger));
-
-            collection.Configure<LoggerFilterOptions>(log => log.MinLevel = LogLevel.Warning);
-
-            var provider = collection.BuildServiceProvider();
-            var server = provider.GetService<IRestServer>();
-
-            server.Router.Services = collection;
-            server.RouteScanner.Services = collection;
-
-            server.GlobalResponseHeaders.Add("Server", $"{ModuleInitializer.GetAppName()}/1.0.0 ({RuntimeInformation.OSDescription})");
-            server.Prefixes.AddRange(prefixes);
-
-            collection.AddSingleton<IRestServer>(server);
-            collection.AddSingleton<IRouter>(server.Router);
-            collection.AddSingleton<IRouteScanner>(server.RouteScanner);
-
-            server.SetDefaultLogger(logger);
-
-            stopReq = false;
-            restServer = server;
-
-            CodeUtils.OnThread(async () =>
+            try
             {
-                restServer.Start();
+                var collection = new ServiceCollection();
+                var logger = new HttpLogger();
 
-                while (!stopReq)
-                    await Task.Delay(10);
+                if (Log != null)
+                    logger.Output = Log;
 
-                restServer.Stop();
-                restServer.Dispose();
-                restServer = null;
+                collection.AddSingleton(typeof(IConfiguration), defaultConfig);
+
+                collection.AddSingleton<IRestServer, RestServer>();
+                collection.AddSingleton<IRouter, Router>();
+                collection.AddSingleton<IRouteScanner, RouteScanner>();
+
+                collection.AddTransient<IContentFolder, ContentFolder>();
+
+                collection.AddLogging(b => b.AddProvider(logger));
+
+                collection.Configure<LoggerFilterOptions>(log => log.MinLevel = LogLevel.Warning);
+
+                var provider = collection.BuildServiceProvider();
+                var server = provider.GetService<IRestServer>();
+
+                server.Router.Services = collection;
+                server.RouteScanner.Services = collection;
+
+                server.GlobalResponseHeaders.Add("Server", $"{ModuleInitializer.GetAppName()}/1.0.0 ({RuntimeInformation.OSDescription})");
+
+                for (int i = 0; i < prefixes.Length; i++)
+                    server.Prefixes.Add(prefixes[i]);
+
+                collection.AddSingleton<IRestServer>(server);
+                collection.AddSingleton<IRouter>(server.Router);
+                collection.AddSingleton<IRouteScanner>(server.RouteScanner);
+
+                server.SetDefaultLogger(logger);
 
                 stopReq = false;
-            });
+                restServer = server;
+
+                CodeUtils.OnThread(async () =>
+                {
+                    restServer.Start();
+
+                    while (!stopReq)
+                        await Task.Delay(100);
+
+                    restServer.Stop();
+                    restServer.Dispose();
+                    restServer = null;
+
+                    stopReq = false;
+                }, null, ThreadPriority.AboveNormal);
+            }
+            catch (Exception ex)
+            {
+                Log?.Error(ex);
+            }
         }
 
         public void Stop()
@@ -147,22 +166,22 @@ namespace Networking.Http
             restServer.Router.Register(routes);
         }
 
-        public string CreateRoute(Func<IHttpContext, Task> route, HttpMethod method, string url, string description = null)
+        public string CreateRoute(Func<IHttpContext, Task> route, System.Net.Http.HttpMethod method, string url, string description = null)
         {
             if (!IsRunning)
                 throw new InvalidOperationException($"Cannot create route on a not running server");
 
             description ??= "No description.";
 
-            var routeId = Generator.Instance.GetString(60);
-            var routeObj = new Route(route, method, url, true, routeId, description);
+            var routeId = Generator.Instance.GetString(10);
+            var routeObj = new Route(route, new HttpMethod(method.Method), url, true, routeId, description);
 
             restServer.Router.Register(routeObj);
 
             return routeId;
         }
 
-        public string CreateRoute(Func<IHttpContext, Task> route, HttpMethod method, string url, string perm, string description = null)
+        public string CreateRoute(Func<IHttpContext, Task> route, System.Net.Http.HttpMethod method, string url, string perm, string description = null)
         {
             if (!IsRunning)
                 throw new InvalidOperationException($"Cannot create route on a not running server");
@@ -180,8 +199,8 @@ namespace Networking.Http
                 return route.Call(ctx);
             };
 
-            var routeId = Generator.Instance.GetString(60);
-            var routeObj = new Route(route, method, url, true, routeId, description);
+            var routeId = Generator.Instance.GetString(10);
+            var routeObj = new Route(routeMethod, new HttpMethod(method.Method), url, true, routeId, description);
 
             restServer.Router.Register(routeObj);
 

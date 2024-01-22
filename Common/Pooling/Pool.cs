@@ -7,22 +7,36 @@ namespace Common.Pooling
 {
     public class Pool<T>
     {
-        private Stack<T> poolStack;
-
-        public uint InitialSize { get; set; }
-
-        public uint Size
+        public uint InitialSize
         {
-            get => poolStack is null ? uint.MinValue : (uint)poolStack.Count;
+            get;
         }
 
-        public Pool(uint initialSize = uint.MinValue)
+        public virtual uint Size
+        {
+            get => Stack is null ? uint.MinValue : (uint)Stack.Count;
+        }
+
+        public bool IsUsingStack
+        {
+            get;
+        }
+
+        public Stack<T> Stack
+        {
+            get;
+            private set;
+        }
+
+        public Pool(uint initialSize = uint.MinValue, bool usesStack = true)
         {
             InitialSize = initialSize;
+            IsUsingStack = usesStack;
+
             Clear();
         }
 
-        public T Rent()
+        public virtual T Rent()
         {
             var value = GetNextValue();
 
@@ -34,25 +48,25 @@ namespace Common.Pooling
             return value;
         }
 
-        public void Return(T value)
+        public virtual void Return(T value)
         {
             if (value is null)
                 return;
 
             OnReturning(value);
 
-            poolStack.TryPush(value);
+            Stack.TryPush(value);
         }
 
         public void Clear()
             => Clear(InitialSize);
 
-        public void Clear(uint newSize)
+        public virtual void Clear(uint newSize)
         {
-            if (poolStack != null)
-                poolStack?.Clear();
+            if (Stack != null)
+                Stack?.Clear();
             else
-                poolStack = new Stack<T>();
+                Stack = new Stack<T>();
 
             for (int i = 0; i < newSize; i++)
                 Return(Construct());
@@ -65,7 +79,7 @@ namespace Common.Pooling
 
         private T GetNextValue()
         {
-            if (!poolStack.TryPop(out var nextValue))
+            if (!Stack.TryPop(out var nextValue))
                 nextValue = Construct();
 
             return nextValue;

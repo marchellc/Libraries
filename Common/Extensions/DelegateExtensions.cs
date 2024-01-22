@@ -21,7 +21,7 @@ namespace Common.Extensions
             try
             {
                 action();
-                callback.Call(null, errorCallback);
+                callback?.Invoke();
             }
             catch (Exception ex)
             {
@@ -41,7 +41,7 @@ namespace Common.Extensions
             try
             {
                 action(value);
-                callback.Call(null, errorCallback);
+                callback?.Invoke();
             }
             catch (Exception ex)
             {
@@ -61,7 +61,7 @@ namespace Common.Extensions
             try
             {
                 action(value1, value2);
-                callback.Call(null, errorCallback);
+                callback?.Invoke();
             }
             catch (Exception ex)
             {
@@ -81,7 +81,7 @@ namespace Common.Extensions
             try
             {
                 action(value1, value2, value3);
-                callback.Call(null, errorCallback);
+                callback?.Invoke();
             }
             catch (Exception ex)
             {

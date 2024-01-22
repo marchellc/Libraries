@@ -117,7 +117,7 @@ namespace Common
             }
             catch (Exception ex)
             {
-                LogOutput.Common.Raw(ex, ConsoleColor.Red);
+                LogOutput.Raw(ex, ConsoleColor.Red);
             }
         }
 

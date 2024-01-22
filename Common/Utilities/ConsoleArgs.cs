@@ -77,6 +77,6 @@ namespace Common.Utilities
             => switches.Contains(switchName);
 
         public static string GetValue(string key)
-            => keys.TryGetValue(key, out var value) ? value : null;
+            => keys.TryGetValue(key, out var value) ? value : string.Empty;
     }
 }

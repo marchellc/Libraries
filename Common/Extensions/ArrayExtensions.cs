@@ -1,4 +1,6 @@
-﻿using System;
+﻿using Common.Pooling.Pools;
+
+using System;
 using System.Collections;
 using System.Linq;
 
@@ -52,5 +54,11 @@ namespace Common.Extensions
 
             array = array.Where(item => !(item?.Equals(value) ?? false)).ToArray();
         }
+
+        public static T ReturnToPool<T>(this T[] array, int index)
+            => ArrayPool<T>.Shared.ReturnIndex(array, index);
+
+        public static void ReturnToPool<T>(this T[] array)
+            => ArrayPool<T>.Shared.Return(array);
     }
 }

@@ -1,8 +1,8 @@
-﻿using Common.IO.Collections;
-using Common.Logging;
+﻿using Common.Logging;
 using Common.Logging.Console;
 using Common.Logging.File;
 using Common.Extensions;
+using Common.IO.Collections;
 using Common.Attributes.Custom;
 
 using System;
@@ -13,18 +13,18 @@ namespace Common.Utilities.Exceptions
 {
     public static class ExceptionManager
     {
-        private static LockedList<Exception> allExceptions = new LockedList<Exception>();
-        private static LockedList<Exception> unhandledExceptions = new LockedList<Exception>();
+        private static LockedList<Exception> allExceptions;
+        private static LockedList<Exception> unhandledExceptions;
 
-        public static ExceptionSettings Settings { get; set; } = ExceptionSettings.LogUnhandled | ExceptionSettings.LogHandled;
+        public static ExceptionSettings Settings { get; set; }
 
-        public static LogOutput Output { get; private set; } = new LogOutput("Exception Manager");
+        public static LogOutput Output { get; private set; } 
 
-        public static Func<Exception, string> ExceptionFormatter { get; set; } = ExceptionUtils.FormatException;
-        public static Func<StackFrame[], string> TraceFormatter { get; set; } = ExceptionUtils.FormatTrace;
+        public static Func<Exception, string> ExceptionFormatter { get; set; } 
+        public static Func<StackFrame[], string> TraceFormatter { get; set; }
 
-        public static event Action<Exception> OnThrown;
-        public static event Action<Exception> OnUnhandled;
+        public static LockedList<Exception> AllExceptions => allExceptions;
+        public static LockedList<Exception> UnhandledExceptions => unhandledExceptions;
 
         [Init]
         private static void Init()
@@ -32,7 +32,7 @@ namespace Common.Utilities.Exceptions
             allExceptions = new LockedList<Exception>();
             unhandledExceptions = new LockedList<Exception>();
 
-            Settings = ExceptionSettings.LogUnhandled;
+            Settings = ExceptionSettings.LogUnhandled | ExceptionSettings.LogHandled;
 
             ExceptionFormatter = ExceptionUtils.FormatException;
             TraceFormatter = ExceptionUtils.FormatTrace;
@@ -51,7 +51,6 @@ namespace Common.Utilities.Exceptions
         private static void OnGeneralThrown(object _, FirstChanceExceptionEventArgs ev)
         {
             allExceptions.Add(ev.Exception);
-            OnThrown.Call(ev.Exception);
 
             if ((Settings & ExceptionSettings.LogHandled) != 0)
             {
@@ -70,7 +69,6 @@ namespace Common.Utilities.Exceptions
                 return;
 
             unhandledExceptions.Add(exception);
-            OnUnhandled.Call(exception);
 
             if ((Settings & ExceptionSettings.LogUnhandled) != 0)
             {

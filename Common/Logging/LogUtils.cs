@@ -1,4 +1,5 @@
 ﻿using Common.Logging.File;
+using Common.Logging.Console;
 
 using System;
 using System.IO;
@@ -56,19 +57,27 @@ namespace Common.Logging
 
         public static LogOutput Setup(this LogOutput output, bool includeFile = true)
         {
-            var loggers = LogOutput.Common.GetLoggers();
-
-            for (int i = 0; i < loggers.Length; i++)
+            if (LogOutput.Common != null)
             {
-                if (loggers[i] is FileLogger)
-                {
-                    if (includeFile)
-                        output.AddLogger(loggers[i]);
-                    else
-                        continue;
-                }
+                var loggers = LogOutput.Common.GetLoggers();
 
-                output.AddLogger(loggers[i]);
+                for (int i = 0; i < loggers.Length; i++)
+                {
+                    if (loggers[i] is FileLogger)
+                    {
+                        if (includeFile)
+                            output.AddLogger(loggers[i]);
+                        else
+                            continue;
+                    }
+
+                    output.AddLogger(loggers[i]);
+                }
+            }
+            else
+            {
+                if (IsConsoleAvailable)
+                    output.AddLogger(ConsoleLogger.Instance);
             }
 
             return output;

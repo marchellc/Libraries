@@ -1,9 +1,10 @@
-﻿using Common.Extensions;
+﻿using Common.Logging.Console;
+using Common.Extensions;
+using Common.Logging;
 using Common.Values;
 
 using System;
 using System.Collections.Concurrent;
-using System.Reflection;
 using System.Threading;
 
 namespace Common.Utilities
@@ -17,30 +18,44 @@ namespace Common.Utilities
             public int delay;
         }
 
-        private static readonly ConcurrentQueue<DelayedExecutionInfo> delayedExecution;
-        private static readonly object queueLock = new object();
+        private static ConcurrentQueue<DelayedExecutionInfo> delayedExecution;
+        private static object queueLock;
+
+        public static LogOutput Log { get; private set; }
 
         static CodeUtils()
         {
+            Log = new LogOutput("Code Utils").Setup();
+
             delayedExecution = new ConcurrentQueue<DelayedExecutionInfo>();
+            queueLock = new object();
 
             WhileTrue(() => true, () =>
             {
-                lock (queueLock)
+                try
                 {
-                    while (delayedExecution.TryDequeue(out var delayedExecutionInfo))
+                    lock (queueLock)
                     {
-                        if ((DateTime.Now - delayedExecutionInfo.added).TotalMilliseconds >= delayedExecutionInfo.delay)
+                        while (delayedExecution.TryDequeue(out var delayedExecutionInfo))
                         {
-                            delayedExecutionInfo.target.Call();
-                        }
-                        else
-                        {
-                            delayedExecution.Enqueue(delayedExecutionInfo);
+                            if ((DateTime.Now - delayedExecutionInfo.added).TotalMilliseconds >= delayedExecutionInfo.delay)
+                            {
+                                delayedExecutionInfo.target.Call(null, ex => Log.Error($"Delayed execution of '{delayedExecutionInfo.target.Method.ToName()}' caught an exception:\n{ex}"));
+                            }
+                            else
+                            {
+                                delayedExecution.Enqueue(delayedExecutionInfo);
+                            }
                         }
                     }
                 }
+                catch (Exception ex)
+                {
+                    Log.Error(ex);
+                }
             }, 5);
+
+            Log.Info($"Queue timer started.");
         }
 
         public static void For(int count, Action action)
@@ -49,35 +64,35 @@ namespace Common.Utilities
         public static void For(int start, int end, Action action)
         {
             for (int i = start; i < end; i++)
-                action();
+                action.Call(null, ex => Log.Error($"An exception occured while executing 'For' at index '{i}':\n{ex}"));
         }
 
         public static void OnFalse(Func<bool> validator, Action action)
         {
-            while (validator())
+            while (validator.Call(ex => Log.Error($"'OnFalse' validator caught an exception:\n{ex}")))
                 continue;
 
-            action();
+            action.Call(null, ex => Log.Error($"'OnFalse' action caught an exception:\n{ex}"));
         }
 
         public static void OnTrue(Func<bool> validator, Action action)
         {
-            while (!validator())
+            while (!validator.Call(ex => Log.Error($"'OnTrue' validator caught an exception:\n{ex}")))
                 continue;
 
-            action();
+            action.Call(null, ex => Log.Error($"'OnTrue' action caught an exception:\n{ex}"));
         }
 
         public static void WhileTrue(Func<bool> validator, Action action)
         {
-            while (validator())
-                action();
+            while (validator.Call(ex => Log.Error($"'WhileTrue' validator caught an exception:\n{ex}")))
+                action.Call(null, ex => Log.Error($"'WhileTrue' action caught an exception:\n{ex}"));
         }
 
         public static void WhileFalse(Func<bool> validator, Action action)
         {
-            while (!validator())
-                action();
+            while (validator.Call(ex => Log.Error($"'WhileFalse' validator caught an exception:\n{ex}")))
+                action.Call(null, ex => Log.Error($"'WhileFalse' action caught an exception:\n{ex}"));
         }
 
         public static void WhileTrue(Func<bool> validator, Action action, int period)
@@ -85,53 +100,73 @@ namespace Common.Utilities
 
         public static void WhileTrue(Func<bool> validator, Action action, int period, int delay)
         {
+            if (delay < 0)
+                delay = 0;
+
+            if (period < 0)
+                throw new ArgumentOutOfRangeException(nameof(period));
+
             var timerRef = new ReferenceValue<Timer>(null);
+
             var timer = new Timer(timerRefValue =>
             {
-                if (timerRefValue is null || timerRefValue is not ReferenceValue<Timer> refTimer)
+                if (timerRefValue is null || timerRefValue is not ReferenceValue<Timer> refTimer || refTimer.Value is null)
                     return;
 
-                if (refTimer.Value is null)
-                    return;
-
-                if (!validator())
+                if (!validator.Call(ex => Log.Error($"'WhileTrue' timer validator caught an exception:\n{ex}")))
                 {
                     refTimer.Value.Dispose();
                     return;
                 }
                 else
                 {
-                    action();
+                    action.Call(null, ex => Log.Error($"'WhileTrue' timer action caught an exception:\n{ex}"));
                 }
 
             }, timerRef, delay, period);
 
             timerRef.Value = timer;
+
+            Log?.Verbose($"Started a new 'WhileTrue' timer (period of '{period} ms' with a delay of '{delay} ms'): {action.Method.ToName()}");
         }
 
-        public static void OnThread(Action threadAction, Action callbackAction = null)
+        public static void OnThread(Action threadAction, Action callbackAction = null, ThreadPriority priority = ThreadPriority.Normal, bool isBackground = true)
         {
-            ThreadPool.QueueUserWorkItem(_ =>
+            var thread = new Thread(() =>
             {
-                threadAction.Call();
-                callbackAction?.Call();
+                threadAction.Call(null, ex => Log.Error($"'OnThread' action caught an exception:\n{ex}"));
+                callbackAction.Call(null, ex => Log.Error($"'OnThread' callback action caught an exception:\n{ex}"));
             });
+
+            thread.Priority = priority;
+            thread.IsBackground = isBackground;
+
+            thread.Start();
         }
 
-        public static void OnThread<T>(Func<T> threadFunc, Action<T> callbackAction)
+        public static void OnThread<T>(Func<T> threadFunc, Action<T> callbackAction, ThreadPriority priority = ThreadPriority.Normal, bool isBackground = true)
         {
-            ThreadPool.QueueUserWorkItem(_ =>
+            var thread = new Thread(() =>
             {
-                callbackAction(threadFunc());
+                var result = threadFunc.Call(ex => Log.Error($"'OnThread<T>' function caught an exception:\n{ex}"));
+                callbackAction.Call(result, null, ex => Log.Error($"'OnThread<T>' callback caught an exception:\n{ex}"));
             });
+
+            thread.Priority = priority;
+            thread.IsBackground = isBackground;
+
+            thread.Start();
         }
 
         public static void Delay(Action delayAction, int delay)
         {
+            Log.Verbose($"Delaying method '{delayAction.Method.ToName()}' by '{delay} ms'");
+
             lock (queueLock)
                 delayedExecution.Enqueue(new DelayedExecutionInfo
                 {
                     added = DateTime.Now,
+
                     delay = delay,
                     target = delayAction
                 });

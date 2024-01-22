@@ -91,16 +91,6 @@ namespace Common.Logging
             return logger;
         }
 
-        public void Raw(object message, ConsoleColor color = ConsoleColor.White)
-        {
-            if (message is null || !LogUtils.IsConsoleAvailable)
-                return;
-
-            System.Console.ForegroundColor = color;
-            System.Console.WriteLine(message);
-            System.Console.ResetColor();
-        }
-
         public void Trace(object message)
             => Emit(LogUtils.CreateMessage(source, message.ToString(), LogLevel.Trace));
 
@@ -166,6 +156,16 @@ namespace Common.Logging
                 Common = null;
 
             allOutputs.Remove(this);
+        }
+
+        public static void Raw(object message, ConsoleColor color = ConsoleColor.White)
+        {
+            if (message is null || !LogUtils.IsConsoleAvailable)
+                return;
+
+            System.Console.ForegroundColor = color;
+            System.Console.WriteLine(message);
+            System.Console.ResetColor();
         }
 
         public static void AddToAll<TLogger>() where TLogger : ILogger, new()

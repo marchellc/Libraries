@@ -46,7 +46,7 @@ namespace Common.Pooling.Pools
             return builder;
         }
 
-        public StringBuilder Rent(params string[] lines)
+        public StringBuilder RentLines(params string[] lines)
             => Rent('\n', lines);
 
         public StringBuilder Rent(IEnumerable<string> lines)

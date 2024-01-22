@@ -55,24 +55,20 @@ namespace Common.Patching
 
                 switch (type)
                 {
-                    case PatchType.IlManipulator:
-                        patchMethod = Patcher.Patch(target, null, null, null, null, new HarmonyMethod(patch));
-                        break;
-
                     case PatchType.Prefix:
-                        patchMethod = Patcher.Patch(target, new HarmonyMethod(patch), null, null, null, null);
+                        patchMethod = Patcher.Patch(target, new HarmonyMethod(patch), null, null, null);
                         break;
 
                     case PatchType.Postfix:
-                        patchMethod = Patcher.Patch(target, null, new HarmonyMethod(patch), null, null, null);
+                        patchMethod = Patcher.Patch(target, null, new HarmonyMethod(patch), null, null);
                         break;
 
                     case PatchType.Finalizer:
-                        patchMethod = Patcher.Patch(target, null, null, null, new HarmonyMethod(patch), null);
+                        patchMethod = Patcher.Patch(target, null, null, null, new HarmonyMethod(patch));
                         break;
 
                     case PatchType.Transpiler:
-                        patchMethod = Patcher.Patch(target, null, null, new HarmonyMethod(patch), null, null);
+                        patchMethod = Patcher.Patch(target, null, null, new HarmonyMethod(patch), null);
                         break;
 
                     default:
@@ -224,8 +220,13 @@ namespace Common.Patching
 
         public static void RemoveAllPatches()
         {
-            Patcher.UnpatchSelf();
+            Patcher.UnpatchAll(Patcher.Id);
             patches.Clear();
+        }
+
+        public static void Patch(MethodInfo methodInfo, Func<bool> value, PatchType prefix)
+        {
+            throw new NotImplementedException();
         }
     }
 }

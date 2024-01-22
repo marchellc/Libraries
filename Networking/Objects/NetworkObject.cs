@@ -48,6 +48,21 @@ namespace Networking.Objects
             net.Send(new NetworkRaiseEventMessage(typeHash, eventHash, args));
         }
 
+        public void LoadHashesWithType(string typeName)
+        {
+            foreach (var field in thisType.GetAllFields())
+            {
+                if (!field.IsStatic || field.IsInitOnly || field.FieldType != typeof(ushort) 
+                    || (!field.Name.StartsWith("Cmd") && !field.Name.StartsWith("Rpc") || !field.Name.EndsWith("Hash")))
+                    continue;
+
+                var hashName = $"{typeName}+{field.Name.Replace("Hash", "")}";
+                var hashValue = hashName.GetStableHash();
+
+                field.SetValueFast(null, hashValue);
+            }
+        }
+
         internal void StartInternal()
         {
             foreach (var fieldPair in manager.netFields)
