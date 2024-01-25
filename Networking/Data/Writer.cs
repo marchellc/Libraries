@@ -290,6 +290,17 @@ namespace Networking.Data
             }
         }
 
+        public void WriteNullable<T>(T? value) where T : struct
+        {
+            if (value.HasValue)
+            {
+                WriteBool(true);
+                Write(value.Value);
+            }
+            else
+                WriteBool(false);
+        }
+
         public void WriteList<T>(IEnumerable<T> items)
         {
             var writer = TypeLoader.GetWriter(typeof(T));
@@ -338,6 +349,57 @@ namespace Networking.Data
             {
                 WriteByte(0);
                 return;
+            }
+        }
+
+        public void WriteProperties(object value, params string[] properties)
+        {
+            if (value is null)
+                throw new ArgumentNullException(nameof(value));
+
+            var type = value.GetType();
+
+            WriteList(properties.ToList());
+
+            for (int i = 0; i < properties.Length; i++)
+            {
+                var property = type.Property(properties[i]);
+
+                if (property is null)
+                    continue;
+
+                var getMethod = property.GetGetMethod(true);
+
+                if (getMethod is null)
+                    continue;
+
+                var propertyValue = property.GetValueFast<object>(value);
+
+                WriteAnonymous(propertyValue);
+            }
+        }
+
+        public void WriteAllProperties(object value)
+        {
+            if (value is null)
+                throw new ArgumentNullException(nameof(value));
+
+            var type = value.GetType();
+            var properties = type.GetAllProperties();
+
+            WriteList(properties.Select(p => p.Name).ToList());
+
+            for (int i = 0; i < properties.Length; i++)
+            {
+                var property = properties[i];
+                var getMethod = property.GetGetMethod(true);
+
+                if (getMethod is null)
+                    continue;
+
+                var propertyValue = property.GetValueFast<object>(value);
+
+                WriteAnonymous(propertyValue);
             }
         }
 

@@ -260,7 +260,7 @@ namespace Networking.Data
             return charValue[0];
         }
 
-        public string ReadCleanString()
+        public string ReadString()
         {
             var stringId = ReadByte();
 
@@ -293,13 +293,31 @@ namespace Networking.Data
 
         public Type ReadType()
         {
-            var typeName = ReadCleanString();
+            var typeName = ReadString();
             var typeValue = Type.GetType(typeName, false, true);
 
             if (typeValue is null)
                 throw new TypeLoadException($"Type '{typeName}' has not been found.");
 
             return typeValue;
+        }
+
+        public Reader ReadReader()
+        {
+            var bytes = ReadBytes();
+            var reader = ReaderPool.Shared.Rent();
+
+            reader.SetData(bytes);
+
+            return reader;
+        }
+
+        public T? ReadNullable<T>() where T : struct
+        {
+            if (ReadBool())
+                return Read<T>();
+
+            return null;
         }
 
         public object ReadAnonymous()
@@ -456,14 +474,39 @@ namespace Networking.Data
             }
         }
 
-        public Reader ReadReader()
+        public void ReadProperties<T>(ref T value)
         {
-            var bytes = ReadBytes();
-            var reader = ReaderPool.Shared.Rent();
+            if (value is null)
+                throw new ArgumentNullException(nameof(value));
 
-            reader.SetData(bytes);
+            var type = typeof(T);
+            var properies = ReadList<string>();
 
-            return reader;
+            for (int i = 0; i < properies.Count; i++)
+            {
+                var property = type.Property(properies[i]);
+
+                if (property is null)
+                    continue;
+
+                var setMethod = property.GetSetMethod(true);
+
+                if (setMethod is null)
+                    continue;
+
+                var propertyValue = ReadAnonymous();
+
+                if (propertyValue is null)
+                {
+                    property.SetValueFast(null, value);
+                    continue;
+                }
+
+                if (propertyValue.GetType() != property.PropertyType)
+                    continue;
+
+                property.SetValueFast(propertyValue, value);
+            }
         }
 
         public void ClearBuffer()

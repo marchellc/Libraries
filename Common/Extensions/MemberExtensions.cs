@@ -36,7 +36,7 @@ namespace Common.Extensions
                 else
                     str += "static ";
 
-                str += $"method {method.ReturnType.FullName} {method.DeclaringType.FullName}.{method.Name}";
+                str += $"method {method.ReturnType.FullName} {(method.DeclaringType != null ? $"{method.DeclaringType.FullName}." : "")}{method.Name}";
 
                 var methodParams = method.Parameters();
 

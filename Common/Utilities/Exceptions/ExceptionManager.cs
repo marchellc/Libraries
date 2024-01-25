@@ -32,7 +32,7 @@ namespace Common.Utilities.Exceptions
             allExceptions = new LockedList<Exception>();
             unhandledExceptions = new LockedList<Exception>();
 
-            Settings = ExceptionSettings.LogUnhandled | ExceptionSettings.LogHandled;
+            Settings = ExceptionSettings.LogUnhandled;
 
             ExceptionFormatter = ExceptionUtils.FormatException;
             TraceFormatter = ExceptionUtils.FormatTrace;

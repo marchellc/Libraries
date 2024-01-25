@@ -23,7 +23,7 @@ namespace Networking.Requests
             sentAt = reader.ReadDate();
             receivedAt = DateTime.Now;
 
-            id = reader.ReadCleanString();
+            id = reader.ReadString();
 
             isSuccess = reader.ReadBool();
 

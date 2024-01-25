@@ -1,12 +1,18 @@
 ﻿using Common.Pooling.Pools;
+
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Linq;
 
 namespace Common.Extensions
 {
     public static class QueueExtensions
     {
+        public static Queue<T> ToQueue<T>(this IEnumerable<T> values)
+            => new Queue<T>(values);
+
+        public static ConcurrentQueue<T> ToConcurrentQueue<T>(this IEnumerable<T> values)
+            => new ConcurrentQueue<T>(values);
+
         public static bool TryDequeue<T>(this Queue<T> queue, out T value)
         {
             if (queue.Count <= 0)

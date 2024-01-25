@@ -8,6 +8,9 @@ namespace Common.Extensions
 {
     public static class PropertyExtensions
     {
+        public static PropertyInfo Property(this Type type, string name)
+            => Fasterflect.PropertyExtensions.Property(type, name, Flags.AllMembers);
+
         public static PropertyInfo[] GetAllProperties(this Type type)
             => type.Properties(Flags.AllMembers).ToArray();
 

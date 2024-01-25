@@ -12,6 +12,7 @@ using System.Reflection;
 using System.Linq;
 using System.Globalization;
 using System.Threading;
+using Common.IO.Data;
 
 namespace Common
 {
@@ -69,10 +70,10 @@ namespace Common
 
                 ConsoleArgs.Parse(Environment.GetCommandLineArgs().Skip(1).ToArray());
 
-                if (IsDebugBuild || ConsoleArgs.HasSwitch("debug"))
+                if (IsDebugBuild || ConsoleArgs.HasSwitch("DebugLogs"))
                     LogOutput.Common.Enable(LogLevel.Debug);
 
-                if (ConsoleArgs.HasSwitch("invariantCulture"))
+                if (ConsoleArgs.HasSwitch("InvariantCulture"))
                 {
                     try
                     {
@@ -90,13 +91,16 @@ namespace Common
 
                 InstanceManager.Init();
 
-                if (LogUtils.IsConsoleAvailable && !ConsoleArgs.HasSwitch("disableCommands"))
+                if (LogUtils.IsConsoleAvailable && !ConsoleArgs.HasSwitch("DisableCommands"))
                 {
                     LogOutput.Common.Info("Initializing commands ..");
                     ConsoleCommands.Enable();
                 }
 
                 LogOutput.Common.Info($"Directory: {Directory.Path}");
+
+                DataWriterLoader.Initialize();
+                DataReaderLoader.Initialize();
 
                 AttributeCollector.ForEach<InitAttribute>((data, attr) =>
                 {

@@ -1,8 +1,6 @@
 ﻿using Common.Extensions;
 using Common.Pooling.Pools;
 
-using Fasterflect;
-
 using System.Reflection;
 
 namespace Common.Pooling
@@ -18,7 +16,7 @@ namespace Common.Pooling
             var poolType = typeof(PoolablePool<>).MakeGenericType(thisType);
 
             poolInstance = poolType.Property("Shared").GetValueFast<object>();
-            poolMethod = Extensions.TypeExtensions.Method(poolType, "Return");
+            poolMethod = TypeExtensions.Method(poolType, "Return");
         }
 
         internal bool isPooled;

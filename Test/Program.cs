@@ -1,13 +1,10 @@
-﻿using Common.Extensions;
-using Common.Logging;
-using Common.Patching;
-using Common.Utilities;
+﻿using Common.Logging;
 
-using Networking.Http;
-
-using System;
-using System.Net.Http;
 using System.Threading.Tasks;
+using System;
+
+using Common.Pooling.Pools;
+using Common.IO.Data;
 
 namespace Test
 {
@@ -15,67 +12,39 @@ namespace Test
     {
         public static async Task Main(string[] args)
         {
-            LogOutput.Raw("before patching");
+            var log = new LogOutput("Test").Setup();
 
-            method();
-
-            LogOutput.Raw("patching");
-
-            PatchManager.Patch<Func<bool>>(typeof(Program).Method("method"), () => patchmethod(), PatchType.Prefix);
-
-            LogOutput.Raw("after patching");
-
-            method();
-
-            /*
             try
             {
-                var log = new LogOutput("Test").Setup();
+                var writer = PoolablePool<DataWriter>.Shared.Rent();
 
-                var step = 0;
+                writer.Write("hello");
+                writer.Write(typeof(Program));
 
-                step++;
-                log.Info(step);
+                var data = writer.Data;
 
-                var server = new HttpServer();
+                log.Info($"Writer: {data.Length} bytes");
 
-                step++;
-                log.Info(step);
+                PoolablePool<DataWriter>.Shared.Return(writer);
 
-                server.Start("http://127.0.0.1/");
+                var reader = PoolablePool<DataReader>.Shared.Rent();
 
-                step++;
-                log.Info(step);
+                reader.Set(data);
 
-                CodeUtils.Delay(() =>
-                {
-                    var id = server.CreateRoute(ctx =>
-                    {
-                        ctx.RespondOk("test");
-                        return Task.CompletedTask;
-                    }, HttpMethod.Get, "/test", "A test route");
+                log.Info($"Reader: {reader.Buffer.DataSize} bytes");
 
-                    log.Info($"Created route ID: {id}");
-                }, 100);
+                var str = reader.Read<string>();
+                var type = reader.Read<Type>();
 
-                step++;
-                log.Info(step);
+                log.Info($"String: {str}");
+                log.Info($"Type: {type.FullName}");
             }
             catch (Exception ex)
             {
-                LogOutput.Common.Error(ex);
+                log.Error(ex);
             }
-            */
 
             await Task.Delay(-1);
         }
-
-        public static bool patchmethod()
-        {
-            LogOutput.Raw("patch method");
-            return false;
-        }
-
-        public static void method() => LogOutput.Raw("method");
     }
 }

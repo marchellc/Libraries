@@ -37,7 +37,7 @@ namespace Networking.Requests
 
         public void Deserialize(Reader reader)
         {
-            id = reader.ReadCleanString();
+            id = reader.ReadString();
 
             sentAt = reader.ReadDate();
             receivedAt = DateTime.Now;

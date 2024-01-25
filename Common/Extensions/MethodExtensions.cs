@@ -171,6 +171,9 @@ namespace Common.Extensions
             }
         }
 
+        public static MethodInfo CloneToMemory(this MethodBase target)
+            => new DynamicMethodDefinition(target).Generate();
+
         public static MethodBase[] GetMethodCalls(this MethodBase method)
             => GetInstructions(method).Where(i => i.Operand != null && i.Operand is MethodBase)
                                       .Select(i => (MethodBase)i.Operand)

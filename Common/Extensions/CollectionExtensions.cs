@@ -18,6 +18,15 @@ namespace Common.Extensions
         public static void ReturnToShared<T>(this HashSet<T> set)
             => HashSetPool<T>.Shared.Return(set);
 
+        public static List<T> WhereList<T>(this IEnumerable<T> values, Func<T, bool> predicate)
+            => values.Where(predicate).ToList();
+
+        public static HashSet<T> WhereSet<T>(this IEnumerable<T> values, Func<T, bool> predicate)
+            => values.Where(predicate).ToHashSet();
+
+        public static T[] WhereArray<T>(this IEnumerable<T> values, Func<T, bool> predicate)
+            => values.Where(predicate).ToArray();
+
         public static void ExternalModify<T>(this IList<T> collection, Action<T, IList<T>> action)
         {
             var copy = ListPool<T>.Shared.Rent(collection);

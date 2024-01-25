@@ -40,6 +40,9 @@ namespace Common.Extensions
         public static object Construct(this Type type, params object[] parameters)
             => type.CreateInstance(parameters);
 
+        public static T Construct<T>(this Type type, params object[] parameters)
+            => (T)type.CreateInstance(parameters);
+
         public static T Construct<T>(params object[] parameters)
         {
             var value = typeof(T).CreateInstance(parameters);
@@ -108,6 +111,7 @@ namespace Common.Extensions
                 case TypeCode.Char: return typeof(char);
                 case TypeCode.String: return typeof(string);
                 case TypeCode.Boolean: return typeof(bool);
+
                 case TypeCode.DateTime: return typeof(DateTime);
 
                 default: return null;
