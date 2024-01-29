@@ -3,6 +3,8 @@ using Common.Logging;
 
 using Fasterflect;
 
+using MonoMod.Utils;
+
 using System;
 using System.Linq;
 using System.Reflection;
@@ -117,5 +119,11 @@ namespace Common.Extensions
                 default: return null;
             }
         }
+
+        public static int GetSize(this Type type)
+            => type.GetManagedSize();
+
+        public static int GetHash(this Type type)
+            => type.AssemblyQualifiedName.GetStableHashCode();
     }
 }

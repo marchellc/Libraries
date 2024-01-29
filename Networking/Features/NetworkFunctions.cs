@@ -1,21 +1,21 @@
 ﻿using Common.Extensions;
+using Common.IO.Data;
+using Common.Pooling.Pools;
 
-using Networking.Data;
-using Networking.Pooling;
 using System;
 
 namespace Networking.Features
 {
     public class NetworkFunctions
     {
-        private Action<Writer> send;
+        private Action<DataWriter> send;
         private Action disconnect;
 
         public bool IsClient { get; }
         public bool IsServer { get; }
 
         public NetworkFunctions(
-            Action<Writer> send,
+            Action<DataWriter> send,
             Action disconnect,
             
             bool isClient)
@@ -33,12 +33,12 @@ namespace Networking.Features
         public void Disconnect()
             => disconnect();
 
-        public void Send(Writer writer)
+        public void Send(DataWriter writer)
             => send(writer);
 
-        public void Send(Action<Writer> writer)
+        public void Send(Action<DataWriter> writer)
         {
-            var net = WriterPool.Shared.Rent();
+            var net = PoolablePool<DataWriter>.Shared.Rent();
 
             if (net is null)
                 return;
@@ -48,7 +48,7 @@ namespace Networking.Features
             Send(net);
         }
 
-        public void Send(params object[] messages)
-            => Send(writer => writer.WriteAnonymousArray(messages));
+        public void Send<T>(T message)
+            => Send(writer => writer.WriteObject(message));
     }
 }

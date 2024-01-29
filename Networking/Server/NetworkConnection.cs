@@ -1,26 +1,24 @@
 ﻿using Common.Extensions;
-using Common.IO.Collections;
 using Common.Logging;
 
-using Networking.Data;
+using Common.Pooling.Pools;
+
+using Common.IO.Collections;
+using Common.IO.Data;
+
 using Networking.Features;
-using Networking.Pooling;
 using Networking.Utilities;
+using Networking.Messages;
 
 using System;
 using System.Net;
 using System.Threading;
-using System.Collections.Concurrent;
 
 namespace Networking.Server
 {
     public class NetworkConnection
     {
-        private volatile Timer timer;
         private volatile Timer ping;
-
-        private ConcurrentQueue<byte[]> inDataQueue = new ConcurrentQueue<byte[]>();
-        private ConcurrentQueue<byte[]> outDataQueue = new ConcurrentQueue<byte[]>();
 
         private LockedDictionary<Type, NetworkFeature> features = new LockedDictionary<Type, NetworkFeature>();
 
@@ -29,7 +27,6 @@ namespace Networking.Server
 
         public LogOutput Log { get; }
 
-        public ClientConfig Config { get; } = new ClientConfig();
         public LatencyInfo Latency { get; } = new LatencyInfo();
 
         public NetworkServer Server { get; }
@@ -62,28 +59,20 @@ namespace Networking.Server
 
             Log.Info($"Connection initialized on {EndPoint}!");
 
-            timer = new Timer(_ => UpdateDataQueue(), null, 0, 10);
-
             foreach (var type in server.Features)
             {
-                Log.Verbose($"Caching server feature: {type.FullName}");
-
                 var feature = type.Construct();
 
                 if (feature is null || feature is not NetworkFeature netFeature)
                     continue;
 
                 features[type] = netFeature;
-
-                Log.Debug($"Cached server feature: {type.FullName}");
             }
 
             ping = new Timer(_ => UpdatePing(), null, 0, 500);
 
             foreach (var feature in features.Values)
             {
-                Log.Debug($"Starting feature: {feature.GetType().FullName}");
-
                 try
                 {
                     feature.InternalStart(Network);
@@ -109,9 +98,7 @@ namespace Networking.Server
             if (features.ContainsKey(typeof(T)))
                 return;
 
-            Log.Debug($"Adding feature {typeof(T).FullName}");
-
-            var feature = Activator.CreateInstance<T>();
+            var feature = typeof(T).Construct<T>();
 
             if (feature is null)
                 return;
@@ -120,8 +107,6 @@ namespace Networking.Server
             feature.Log!.Name += $" ({EndPoint})";
 
             features[typeof(T)] = feature;
-
-            Log.Debug($"Added feature {typeof(T).FullName}");
         }
 
         public void Remove<T>() where T : NetworkFeature
@@ -132,17 +117,20 @@ namespace Networking.Server
             features.Remove(typeof(T));
         }
 
-        public void Send(Action<Writer> writerFunction)
+        public void Send<T>(T message)
+            => Send(writer => writer.WriteObject(message));
+
+        public void Send(Action<DataWriter> writerFunction)
         {
-            var writer = WriterPool.Shared.Rent();
-            writerFunction.Call(writer);
+            var writer = PoolablePool<DataWriter>.Shared.Rent();
+            writerFunction(writer);
             Send(writer);
         }
 
-        public void Send(Writer writer)
+        public void Send(DataWriter writer)
         {
-            inDataQueue.Enqueue(writer.Buffer);
-            WriterPool.Shared.Return(writer);
+            Server.ApiServer.Send(Id, writer.Data.ToSegment());
+            PoolablePool<DataWriter>.Shared.Return(writer);
         }
 
         public void Disconnect()
@@ -150,36 +138,39 @@ namespace Networking.Server
 
         internal void InternalReceive(byte[] data)
         {
-            var reader = ReaderPool.Shared.Rent(data);
+            var reader = PoolablePool<DataReader>.Shared.Rent();
+
+            reader.Set(data);
 
             try
             {
-                var messages = reader.ReadAnonymousArray();
+                var message = reader.ReadObject();
 
-                for (int i = 0; i < messages.Length; i++)
+                if (message != null)
                 {
-                    if (messages[i] is NetworkPingMessage pingMsg)
+                    var msgType = message.GetType();
+
+                    if (message is NetworkPingMessage networkPingMessage)
+                        ProcessPing(networkPingMessage);
+                    else
                     {
-                        ProcessPing(pingMsg);
-                        continue;
-                    }
+                        Log.Verbose($"Processing message: {msgType.FullName}");
 
-                    Log.Verbose($"Processing message: {messages[i].GetType().FullName}");
+                        OnMessage.Call(msgType, message);
 
-                    OnMessage.Call(messages[i].GetType(), messages[i]);
-
-                    foreach (var feature in features.Values)
-                    {
-                        Log.Verbose($"Validating message for feature '{feature.GetType().FullName}'");
-
-                        if (feature.IsRunning && feature.HasListener(messages[i].GetType()))
+                        foreach (var feature in features.Values)
                         {
-                            Log.Verbose($"Feature contains a listener.");
-
-                            feature.Receive(messages[i]);
-                            break;
+                            if (feature.IsRunning && feature.HasListener(msgType))
+                            {
+                                feature.Receive(message);
+                                break;
+                            }
                         }
                     }
+                }
+                else
+                {
+                    Log.Error($"Received a null message!");
                 }
             }
             catch (Exception ex)
@@ -187,22 +178,13 @@ namespace Networking.Server
                 Log.Error($"An error occured while processing incoming data:\n{ex}");
             }
 
-            ReaderPool.Shared.Return(reader);
+            PoolablePool<DataReader>.Shared.Return(reader);
         }
 
         internal void Stop()
         {
-            timer?.Dispose();
-            timer = null;
-
             ping?.Dispose();
             ping = null;
-
-            outDataQueue?.Clear();
-            inDataQueue?.Clear();
-
-            outDataQueue = null;
-            inDataQueue = null;
 
             foreach (var feature in features.Values)
                 feature.InternalStop();
@@ -212,42 +194,17 @@ namespace Networking.Server
             Status = NetworkConnectionStatus.Disconnected;
         }
 
-        internal void Receive(byte[] data)
-            => inDataQueue.Enqueue(data);
-
         private void ProcessPing(NetworkPingMessage pingMsg)
         {
-            if (pingMsg.isServer)
+            if (pingMsg.IsFromServer)
                 return;
 
-            Latency.Update((pingMsg.recv - pingMsg.sent).TotalMilliseconds / 10);
+            Latency.Update((pingMsg.Received - pingMsg.Sent).TotalMilliseconds);
 
             OnPinged.Call();
         }
 
         private void UpdatePing()
-        {
-            Send(writer => writer.WriteAnonymousArray(new NetworkPingMessage(true, DateTime.Now, DateTime.MinValue)));
-            OnPinged.Call();
-        }
-
-        private void UpdateDataQueue()
-        {
-            var outProcessed = 0;
-
-            while (outDataQueue.TryDequeue(out var outData) && outProcessed <= Config.OutgoingAmount)
-            {
-                Server.ApiServer.Send(Id, outData.ToSegment());
-                outProcessed++;
-            }
-
-            var inProcessed = 0;
-
-            while (inDataQueue.TryDequeue(out var inData) && inProcessed <= Config.IncomingAmount)
-            {
-                InternalReceive(inData);
-                inProcessed++;
-            }
-        }
+            => Send(new NetworkPingMessage(true, DateTime.Now, DateTime.Now));
     }
 }

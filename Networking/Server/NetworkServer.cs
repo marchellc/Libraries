@@ -4,11 +4,10 @@ using Common.Logging;
 using Common.Utilities;
 
 using Networking.Features;
-using Networking.Utilities;
 
 using System;
-using System.Collections.Generic;
 using System.Linq;
+using System.Collections.Generic;
 
 namespace Networking.Server
 {
@@ -18,7 +17,6 @@ namespace Networking.Server
         private readonly LockedList<Type> features = new LockedList<Type>();
 
         public LogOutput Log { get; }
-        public ClientConfig Config { get; } = new ClientConfig();
 
         public Telepathy.Server ApiServer { get; private set; }
 
@@ -51,8 +49,6 @@ namespace Networking.Server
         {
             ServerVersion = new Version(1, 0, 0, 0);
             Instance = new NetworkServer();
-
-            TypeLoader.Init();
         }
 
         public NetworkServer(int port = 8000)
@@ -72,7 +68,7 @@ namespace Networking.Server
 
             try
             {
-                ApiServer = new Telepathy.Server(1024 * 1024 * 10);
+                ApiServer = new Telepathy.Server(ushort.MaxValue);
                 ApiServer.NoDelay = true;
 
                 ApiServer.OnConnected = OnClientConnected;
@@ -81,10 +77,10 @@ namespace Networking.Server
 
                 IsRunning = true;
 
-                CodeUtils.WhileTrue(() => IsRunning, () =>
+                CodeUtils.WhileTrue(() => ApiServer != null && ApiServer.Active, () =>
                 {
-                    ApiServer.Tick(100);
-                }, 100);
+                    ApiServer.Tick(10);
+                }, 50);
 
                 ApiServer.Start(Port);
 
@@ -143,11 +139,9 @@ namespace Networking.Server
             if (!connections.TryGetValue(connId, out var connection))
                 return;
 
-            Log.Verbose($"Received client data connId={connId}");
-
             var array = data.ToArray();
 
-            connection.Receive(array);
+            connection.InternalReceive(array);
 
             OnData.Call(connection, array);
         }
@@ -162,20 +156,14 @@ namespace Networking.Server
 
             CodeUtils.Delay(() =>
             {
-
                 var connection = new NetworkConnection(connId, this);
-
-                connection.Config.MaxReconnectionAttempts = Config.MaxReconnectionAttempts;
-
-                connection.Config.OutgoingAmount = Config.OutgoingAmount;
-                connection.Config.IncomingAmount = Config.IncomingAmount;
 
                 connections[connId] = connection;
 
                 OnConnected.Call(connection);
 
                 Log.Info($"Client connected from {connection.EndPoint} connId={connId}");
-            }, 250);
+            }, 50);
         }
 
         private void OnClientDisconnected(int connId)

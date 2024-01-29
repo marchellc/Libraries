@@ -1,55 +1,57 @@
-﻿using Networking.Data;
+﻿using Common.IO.Data;
 
 using System;
 
 namespace Networking.Requests
 {
-    public class RequestInfo : IMessage
+    public struct RequestInfo : IData
     {
-        public RequestInfo() { }
+        public string Id { get; private set; }
 
-        public string id;
+        public object Request { get; private set; }
 
-        public DateTime sentAt;
-        public DateTime receivedAt;
+        public DateTime SentAt { get; private set; }
+        public DateTime ReceivedAt { get; private set; }
 
-        public object value;
+        public RequestManager Manager { get; internal set; }
+        public ResponseInfo Response { get; internal set; }
 
-        public ResponseInfo response;
-        public RequestManager manager;
+        public bool IsResponded { get; internal set; }
 
-        public bool isResponded;
-        public bool isTimedOut;
-
-        public void Respond(object response, bool isSuccess)
+        public RequestInfo(string id, object request)
         {
-            if (isResponded)
-                return;
-
-            this.manager.Respond(this, response, isSuccess);
+            Id = id;
+            Request = request;
+            SentAt = DateTime.Now;
         }
 
-        public void Success(object response)
+        public void Deserialize(DataReader reader)
+        {
+            Id = reader.ReadString();
+            Request = reader.ReadObject();
+            SentAt = reader.ReadDate();
+            ReceivedAt = DateTime.Now;
+        }
+
+        public void Serialize(DataWriter writer)
+        {
+            writer.WriteString(Id);
+            writer.WriteObject(Request);
+            writer.WriteDate(SentAt);
+        }
+
+        public void Respond(object response, bool success)
+        {
+            if (IsResponded)
+                throw new InvalidOperationException($"This request has already been responded to!");
+
+            Manager.Respond(this, response, success);
+        }
+
+        public void RespondOk(object response = null)
             => Respond(response, true);
 
-        public void Fail(object response = null)
+        public void RespondFail(object response = null)
             => Respond(response, false);
-
-        public void Deserialize(Reader reader)
-        {
-            id = reader.ReadString();
-
-            sentAt = reader.ReadDate();
-            receivedAt = DateTime.Now;
-
-            value = reader.ReadAnonymous();
-        }
-
-        public void Serialize(Writer writer)
-        {
-            writer.WriteString(id);
-            writer.WriteDate(DateTime.Now);
-            writer.WriteAnonymous(value);
-        }
     }
 }

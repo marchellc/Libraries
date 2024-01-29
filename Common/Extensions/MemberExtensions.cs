@@ -1,15 +1,23 @@
 ﻿using Fasterflect;
 
 using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Collections.Generic;
 
 namespace Common.Extensions
 {
     public static class MemberExtensions
     {
         private static readonly Dictionary<MemberInfo, string> PreviouslyGeneratedNames = new Dictionary<MemberInfo, string>();
+
+        public static int ToHash(this MemberInfo member)
+        {
+            if (member.DeclaringType != null)
+                return $"{member.DeclaringType.AssemblyQualifiedName}^{member.Name}".GetStableHashCode();
+
+            return member.Name.GetStableHashCode();
+        }
 
         public static bool HasAttribute<TAttribute>(this MemberInfo member, out TAttribute attribute) where TAttribute : Attribute
             => (attribute = member.GetCustomAttribute<TAttribute>()) != null;

@@ -1,18 +1,19 @@
 ﻿using Common.Logging;
 using Common.Extensions;
-using Common.IO.Collections;
+using Common.Pooling.Pools;
 
-using Networking.Address;
-using Networking.Data;
-using Networking.Pooling;
+using Common.IO.Collections;
+using Common.IO.Data;
+
 using Networking.Features;
+using Networking.Utilities;
+using Networking.Messages;
 
 using System;
 using System.Net;
 using System.Threading;
 using System.Collections.Concurrent;
-
-using Networking.Utilities;
+using Common.Utilities;
 
 namespace Networking.Client
 {
@@ -22,29 +23,25 @@ namespace Networking.Client
 
         private NetworkFunctions funcs;
 
-        private volatile Timer timer;
         private volatile Timer connTimer;
-
-        private ConcurrentQueue<byte[]> inDataQueue = new ConcurrentQueue<byte[]>();
-        private ConcurrentQueue<byte[]> outDataQueue = new ConcurrentQueue<byte[]>();
 
         private LockedList<Type> reqFeatures = new LockedList<Type>();
         private LockedDictionary<Type, NetworkFeature> features = new LockedDictionary<Type, NetworkFeature>();
 
-        private object processLock = new object();
+        private ConcurrentQueue<object> unhandledMessages = new ConcurrentQueue<object>();
 
         public bool IsRunning { get; private set; }
 
         public uint ReconnectionAttempts { get; private set; }
+        public uint MaxReconnectionAttempts { get; set; } = 10;
 
         public NetworkConnectionStatus Status { get; private set; } = NetworkConnectionStatus.Disconnected;
 
-        public IPInfo Target { get; set; } = new IPInfo(IPType.Local, 8000, IPAddress.Loopback);
+        public IPEndPoint Target { get; set; }
 
         public LogOutput Log { get; }
 
         public LatencyInfo Latency { get; } = new LatencyInfo();
-        public ClientConfig Config { get; } = new ClientConfig();
 
         public event Action OnDisconnected;
         public event Action OnConnected;
@@ -60,14 +57,14 @@ namespace Networking.Client
         {
             ClientVersion = new Version(1, 0, 0, 0);
             Instance = new NetworkClient();
-
-            TypeLoader.Init();
         }
 
         public NetworkClient()
         {
             Log = new LogOutput("Network Client");
             Log.Setup();
+
+            Target = new IPEndPoint(IPAddress.Loopback, 8000);
 
             funcs = new NetworkFunctions(
                 Send,
@@ -128,17 +125,20 @@ namespace Networking.Client
             features.Remove(typeof(T));
         }
 
-        public void Send(Action<Writer> writer)
+        public void Send<T>(T message)
+            => Send(writer => writer.WriteObject(message));
+
+        public void Send(Action<DataWriter> writer)
             => funcs.Send(writer);
 
-        public void Send(Writer writer)
+        public void Send(DataWriter writer)
         {
             if (writer is null)
                 throw new ArgumentNullException(nameof(writer));
 
-            outDataQueue.Enqueue(writer.Buffer);
+            Send(writer.Data);
 
-            WriterPool.Shared.Return(writer);
+            PoolablePool<DataWriter>.Shared.Return(writer);
         }
 
         public void Send(byte[] data)
@@ -149,7 +149,7 @@ namespace Networking.Client
             if (data.Length <= 0)
                 throw new ArgumentOutOfRangeException(nameof(data));
 
-            outDataQueue.Enqueue(data);
+            client.Send(data.ToSegment());
         }
 
         public void Connect(IPEndPoint endPoint = null)
@@ -157,21 +157,18 @@ namespace Networking.Client
             if (IsRunning)
                 Disconnect();
 
-            if (endPoint != null && Target.EndPoint != null && Target.EndPoint != endPoint)
-                Target = new IPInfo(IPType.Remote, endPoint.Port, endPoint.Address);
-            else if (Target.EndPoint is null && endPoint != null)
-                Target = new IPInfo(IPType.Remote, endPoint.Port, endPoint.Address);
+            if (Target is null && endPoint is null)
+                throw new ArgumentNullException(nameof(endPoint));
+
+            if (Target is null && endPoint != null || (Target != null && endPoint != null && Target != endPoint))
+                Target = endPoint;
 
             Log.Name = $"Network Client ({Target})";
-
             Log.Info($"Client connecting to {Target} ..");
 
             try
             {
-                outDataQueue.Clear();
-                inDataQueue.Clear();
-
-                client = new Telepathy.Client(1024 * 1024 * 10);
+                client = new Telepathy.Client(ushort.MaxValue);
 
                 client.OnConnected = HandleConnect;
                 client.OnDisconnected = HandleDisconnect;
@@ -183,10 +180,10 @@ namespace Networking.Client
 
                 IsRunning = true;
 
+                CodeUtils.WhileTrue(() => IsRunning, () => client.Tick(10), 50);
+
                 connTimer?.Dispose();
                 connTimer = null;
-
-                timer = new Timer(_ => UpdateDataQueue(), null, 0, 10);
 
                 TryConnect();
             }
@@ -216,7 +213,7 @@ namespace Networking.Client
 
             Status = NetworkConnectionStatus.Disconnected;
 
-            if (ReconnectionAttempts >= Config.MaxReconnectionAttempts)
+            if (ReconnectionAttempts >= MaxReconnectionAttempts)
             {
                 Log.Error($"Connection attempts count reached, retrying in 30 seconds.");
 
@@ -237,7 +234,7 @@ namespace Networking.Client
 
             Status = NetworkConnectionStatus.Connecting;
 
-            client.Connect(Target.Raw, Target.Port,
+            client.Connect(Target.Address.ToString(), Target.Port,
 
             () =>
             {
@@ -247,7 +244,7 @@ namespace Networking.Client
 
             () =>
             {
-                Log.Error($"Connection failed, retrying ({ReconnectionAttempts} / {Config.MaxReconnectionAttempts}) ..");
+                Log.Error($"Connection failed, retrying ({ReconnectionAttempts} / {MaxReconnectionAttempts}) ..");
                 ReconnectionAttempts++;
                 TryConnect();
             });
@@ -276,7 +273,7 @@ namespace Networking.Client
                     }
                 }
 
-                InternalStart();
+                InternalStart();             
 
                 OnConnected.Call();
 
@@ -295,11 +292,7 @@ namespace Networking.Client
             connTimer?.Dispose();
             connTimer = null;
 
-            timer?.Dispose();
-            timer = null;
-
-            outDataQueue.Clear();
-            inDataQueue.Clear();
+            unhandledMessages.Clear();
 
             Status = NetworkConnectionStatus.Disconnected;
 
@@ -330,8 +323,23 @@ namespace Networking.Client
         {
             if (!IsRunning)
                 throw new InvalidOperationException($"The client needs to be running to process data");
+            
+            var reader = PoolablePool<DataReader>.Shared.Rent();
 
-            inDataQueue.Enqueue(input.ToArray());
+            try
+            {
+                reader.Set(input.ToArray());
+
+                var message = reader.ReadObject();
+
+                ProcessMessage(message);
+            }
+            catch (Exception ex)
+            {
+                Log.Error($"HandleData caught an exception:\n{ex}");
+            }
+
+            PoolablePool<DataReader>.Shared.Return(reader);
 
             OnData.Call(input);
         }
@@ -358,99 +366,71 @@ namespace Networking.Client
             }
         }
 
-        private void InternalSend(byte[] data)
+        private void ProcessMessage(object message)
         {
-            if (client is null || !client.Connected)
-                throw new InvalidOperationException($"Cannot send data over an unconnected socket");
-
-            client.Send(data.ToSegment());
-        }
-
-        private void InternalReceive(byte[] data)
-        {
-            var reader = ReaderPool.Shared.Rent(data);
-
             try
             {
-                var messages = reader.ReadAnonymousArray();
-
-                for (int i = 0; i < messages.Length; i++)
+                if (message != null)
                 {
-                    if (messages[i] is NetworkPingMessage pingMsg)
+                    var type = message.GetType();
+
+                    if (message is NetworkPingMessage networkPingMessage)
+                        ProcessPing(networkPingMessage);
+                    else
                     {
-                        ProcessPing(pingMsg);
-                        continue;
-                    }
+                        var isHandled = false;
 
-                    Log.Verbose($"Processing message: {messages[i].GetType().FullName}");
+                        Log.Verbose($"Processing message: {type.FullName}");
 
-                    OnMessage.Call(messages[i].GetType(), messages[i]);
+                        OnMessage.Call(type, message);
 
-                    foreach (var feature in features.Values)
-                    {
-                        if (feature.IsRunning && feature.HasListener(messages[i].GetType()))
+                        foreach (var feature in features.Values)
                         {
-                            feature.Receive(messages[i]);
-                            break;
+                            if (feature.IsRunning && feature.HasListener(type))
+                            {
+                                isHandled = true;
+
+                                feature.Receive(message);
+                                break;
+                            }
+                        }
+
+                        if (!isHandled)
+                        {
+                            Log.Warn($"No message handlers are registered for message {type.FullName}.");
+                            unhandledMessages.Enqueue(message);
                         }
                     }
+                }
+                else
+                {
+                    Log.Error($"Received a null message!");
                 }
             }
             catch (Exception ex)
             {
                 Log.Error($"An error occured while processing incoming data:\n{ex}");
-            }
 
-            ReaderPool.Shared.Return(reader);
+                if (message != null)
+                    unhandledMessages.Enqueue(message);
+            }
         }
 
         private void ProcessPing(NetworkPingMessage pingMsg)
         {
-            if (!pingMsg.isServer)
+            if (!pingMsg.IsFromServer)
                 return;
 
-            Latency.Update((pingMsg.recv - pingMsg.sent).TotalMilliseconds);
+            Latency.Update((pingMsg.Received - pingMsg.Sent).TotalMilliseconds);
 
-            Send(writer =>
-            {
-                pingMsg.isServer = false;
+            pingMsg.IsFromServer = false;
 
-                writer.WriteAnonymousArray(pingMsg);
-            });
+            Send(pingMsg);
 
             OnPinged.Call();
-        }
 
-        private void UpdateDataQueue()
-        {
-            lock (processLock)
-            {
-                try
-                {
-                    client?.Tick(100);
-
-                    var outProcessed = 0;
-                    var inProcessed = 0;
-
-                    while (outDataQueue.TryDequeue(out var outData)
-                        && outProcessed <= Config.OutgoingAmount)
-                    {
-                        InternalSend(outData);
-                        outProcessed++;
-                    }
-
-                    while (inDataQueue.TryDequeue(out var inData)
-                        && inProcessed <= Config.IncomingAmount)
-                    {
-                        InternalReceive(inData);
-                        inProcessed++;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Log.Error($"Data update loop failed!\n{ex}");
-                }
-            }
+            if (unhandledMessages.TryDequeue(out var message))
+                ProcessMessage(message);
         }
     }
 }

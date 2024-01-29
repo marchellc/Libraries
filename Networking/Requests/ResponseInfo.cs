@@ -1,41 +1,45 @@
-﻿using Networking.Data;
+﻿using Common.IO.Data;
 
 using System;
 
 namespace Networking.Requests
 {
-    public class ResponseInfo : IMessage
+    public struct ResponseInfo : IData
     {
-        public ResponseInfo() { }
+        public string Id { get; private set; }
 
-        public RequestInfo request;
-        public RequestManager manager;
+        public object Response { get; private set; }
 
-        public DateTime sentAt;
-        public DateTime receivedAt;
+        public bool IsSuccess { get; private set; }
 
-        public object response;
-        public bool isSuccess;
-        public string id;
+        public DateTime SentAt { get; private set; }
+        public DateTime ReceivedAt { get; private set; }
 
-        public void Deserialize(Reader reader)
+        public RequestManager Manager { get; internal set; }
+
+        public ResponseInfo(string id, object response, bool isSuccess)
         {
-            sentAt = reader.ReadDate();
-            receivedAt = DateTime.Now;
-
-            id = reader.ReadString();
-
-            isSuccess = reader.ReadBool();
-
-            response = reader.ReadAnonymous();
+            Id = id;
+            Response = response;
+            IsSuccess = isSuccess;
+            SentAt = DateTime.Now;
         }
 
-        public void Serialize(Writer writer)
+        public void Deserialize(DataReader reader)
         {
-            writer.WriteDate(DateTime.Now);
-            writer.WriteString(id);
-            writer.WriteBool(isSuccess);
-            writer.WriteAnonymous(response);
+            Id = reader.ReadString();
+            Response = reader.ReadObject();
+            SentAt = reader.ReadDate();
+            IsSuccess = reader.ReadBool();
+            ReceivedAt = DateTime.Now;
+        }
+
+        public void Serialize(DataWriter writer)
+        {
+            writer.WriteString(Id);
+            writer.WriteObject(Response);
+            writer.WriteDate(SentAt);
+            writer.WriteBool(IsSuccess);
         }
     }
 }

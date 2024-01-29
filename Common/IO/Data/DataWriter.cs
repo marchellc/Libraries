@@ -5,6 +5,7 @@ using Common.Pooling.Pools;
 using System;
 using System.Text;
 using System.Collections.Generic;
+using System.Reflection;
 
 namespace Common.IO.Data
 {
@@ -170,6 +171,9 @@ namespace Common.IO.Data
             buffer.Add((byte)(l >> 56));
         }
 
+        public void WriteCompressedLong(long l)
+            => DataCompression.CompressLong(this, l);
+
         public void WriteULong(ulong ul)
         {
             buffer.Add((byte)ul);
@@ -181,6 +185,9 @@ namespace Common.IO.Data
             buffer.Add((byte)(ul >> 48));
             buffer.Add((byte)(ul >> 56));
         }
+
+        public void WriteCompressedULong(ulong ul)
+            => DataCompression.CompressULong(this, ul);
 
         public unsafe void WriteFloating(float f)
         {
@@ -244,6 +251,38 @@ namespace Common.IO.Data
         {
             var typeName = type.FullName;
             WriteString(typeName);
+        }
+
+        public void WriteMethod(MethodInfo method)
+        {
+            WriteType(method.DeclaringType);
+            WriteString(method.Name);
+        }
+
+        public void WriteField(FieldInfo field)
+        {
+            WriteType(field.DeclaringType);
+            WriteString(field.Name);
+        }
+
+        public void WriteProperty(PropertyInfo property)
+        {
+            WriteType(property.DeclaringType);
+            WriteString(property.Name);
+        }
+
+        public void WriteAssemblyImage(Assembly assembly)
+        {
+            var assemblyImageData = assembly.GetRawBytes();
+            var assemblyImage = new AssemblyImageData(assemblyImageData);
+
+            Write(assemblyImage);
+        }
+
+        public void WriteAssemblyImage(byte[] image)
+        {
+            var assemblyImage = new AssemblyImageData(image);
+            Write(assemblyImage);
         }
 
         public void WriteReader(DataReader r)                                                                                                                                              
@@ -346,16 +385,18 @@ namespace Common.IO.Data
 
         public void WriteProperties<T>(T value, params string[] props)
         {
+            WriteInt(props.Length);
+
             for (int i = 0; i < props.Length; i++)
             {
                 var property = typeof(T).Property(props[i]);
 
-                if (property is null || property.GetGetMethod(true) is null || property.GetSetMethod(true) is null)
-                    continue;
+                if (property is null)
+                    throw new InvalidOperationException($"Property of name '{props[i]}' does not exist in type {typeof(T).FullName}");
 
                 var propValue = property.GetValueFast<object>(value);
 
-                WriteString(property.Name);
+                WriteInt(property.ToHash());
                 WriteObject(propValue);
             }
         }

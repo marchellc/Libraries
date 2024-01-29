@@ -1,12 +1,13 @@
-﻿using Common.Extensions;
-using Common.Pooling;
+﻿using Common.Pooling;
 using Common.Pooling.Pools;
 using Common.Utilities;
+using Common.Extensions;
 
 using System;
 using System.IO;
 using System.Text;
 using System.Collections.Generic;
+using System.Reflection;
 
 namespace Common.IO.Data
 {
@@ -199,8 +200,14 @@ namespace Common.IO.Data
         public long ReadLong()
             => buffer.Move(8).ToLong();
 
+        public long ReadCompressedLong()
+            => DataCompression.DecompressLong(this);
+
         public ulong ReadULong()
             => buffer.Move(8).ToULong();
+
+        public ulong ReadCompressedULong()
+            => DataCompression.DecompressULong(this);
 
         public bool ReadBool()
             => buffer.Move(1).ToBoolean();
@@ -260,6 +267,61 @@ namespace Common.IO.Data
                 throw new TypeLoadException($"Failed to find type of ID '{typeName}'");
 
             return type;
+        }
+
+        public Assembly ReadAssemblyImage()
+        {
+            var assemblyImage = Read<AssemblyImageData>();
+
+            if (assemblyImage.Image is null)
+                throw new ArgumentNullException(nameof(assemblyImage.Image));
+
+            return assemblyImage.Load();
+        }
+
+        public MethodInfo ReadMethod()
+        {
+            var type = ReadType();
+            var method = ReadString();
+            var methods = type.GetAllMethods();
+
+            for (int i = 0; i < methods.Length; i++)
+            {
+                if (methods[i].Name == method)
+                    return methods[i];
+            }
+
+            throw new InvalidDataException($"Cannot find method of ID {method} in type {type.FullName}");
+        }
+
+        public FieldInfo ReadField()
+        {
+            var type = ReadType();
+            var field = ReadString();
+            var fields = type.GetAllFields();
+
+            for (int i = 0; i < fields.Length; i++)
+            {
+                if (fields[i].Name == field)
+                    return fields[i];
+            }
+
+            throw new InvalidDataException($"Cannot find field of ID {field} in type {type.FullName}");
+        }
+
+        public PropertyInfo ReadProperty()
+        {
+            var type = ReadType();
+            var property = ReadString();
+            var properties = type.GetAllProperties();
+
+            for (int i = 0; i < properties.Length; i++)
+            {
+                if (properties[i].Name == property)
+                    return properties[i];
+            }
+
+            throw new InvalidDataException($"Cannot find property of ID {property} in type {type.FullName}");
         }
         
         public DataReader ReadReader()
@@ -427,7 +489,7 @@ namespace Common.IO.Data
             return dict;
         }
 
-        public void ReadIntoDictionary<TKey, TValue>(ref IDictionary<TKey, TValue> dict)
+        public void ReadIntoDictionary<TKey, TValue>(IDictionary<TKey, TValue> dict)
         {
             var size = ReadInt();
 
@@ -438,36 +500,34 @@ namespace Common.IO.Data
                 dict[Read<TKey>()] = Read<TValue>();
         }
 
-        public void ReadProperties<T>(ref T value)
+        public void ReadProperties<T>(T value)
         {
             if (value is null)
                 throw new ArgumentNullException(nameof(value));
 
             var type = typeof(T);
-            var properies = ReadList<string>();
+            var count = ReadInt();
+            var properties = type.GetAllProperties();
 
-            for (int i = 0; i < properies.Count; i++)
+            PropertyInfo FindProperty(int propertyHash)
             {
-                var property = type.Property(properies[i]);
-
-                if (property is null)
-                    continue;
-
-                var setMethod = property.GetSetMethod(true);
-
-                if (setMethod is null)
-                    continue;
-
-                var propertyValue = ReadObject();
-
-                if (propertyValue is null)
+                for (int x = 0; x < properties.Length; x++)
                 {
-                    property.SetValueFast(null, value);
-                    continue;
+                    if (properties[x].ToHash() == propertyHash)
+                        return properties[x];
                 }
 
-                if (propertyValue.GetType() != property.PropertyType)
-                    continue;
+                return null;
+            }
+
+            for (int i = 0; i < count; i++)
+            {
+                var propertyHash = ReadInt();
+                var propertyValue = ReadObject();
+                var property = FindProperty(propertyHash);
+
+                if (property is null)
+                    throw new InvalidDataException($"Property of ID {propertyHash} was not present in type {type.FullName}");
 
                 property.SetValueFast(propertyValue, value);
             }

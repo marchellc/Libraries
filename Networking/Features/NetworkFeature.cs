@@ -21,7 +21,7 @@ namespace Networking.Features
         public void Listen<TMessage>(Action<TMessage> listener)
             => listeners[typeof(TMessage)] = msg =>
             {
-                listener.Call((TMessage)msg);
+                listener.Call((TMessage)msg, null, Log.Error);
             };
 
         public void Remove<TMessage>()
@@ -33,13 +33,11 @@ namespace Networking.Features
                 throw new InvalidOperationException($"This feature is already running");
 
             IsRunning = true;
-
             Network = network;
 
             try
             {
                 Log = new LogOutput(GetType().Name.SpaceByUpperCase()).Setup();
-
                 Start();
             }
             catch (Exception ex)
@@ -82,7 +80,7 @@ namespace Networking.Features
             if (!listeners.TryGetValue(msgType, out var listener))
                 return;
 
-            listener.Call(msg);
+            listener.Call(msg, null, Log.Error);
         }
     }
 }

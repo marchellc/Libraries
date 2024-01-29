@@ -1,10 +1,13 @@
 ﻿using Common.Logging;
 
 using System.Threading.Tasks;
-using System;
 
-using Common.Pooling.Pools;
-using Common.IO.Data;
+using Common.Utilities;
+
+using Networking.Server;
+using Networking.Components;
+using Networking.Client;
+using Networking.Requests;
 
 namespace Test
 {
@@ -14,34 +17,52 @@ namespace Test
         {
             var log = new LogOutput("Test").Setup();
 
-            try
+            if (ConsoleArgs.HasSwitch("client"))
             {
-                var writer = PoolablePool<DataWriter>.Shared.Rent();
+                var client = NetworkClient.Instance;
 
-                writer.Write("hello");
-                writer.Write(typeof(Program));
+                client.Add<NetworkParent>();
 
-                var data = writer.Data;
+                client.OnConnected += () =>
+                {
+                    var parent = client.Get<NetworkParent>();
 
-                log.Info($"Writer: {data.Length} bytes");
+                    parent.OnObjectSpawned += (_, obj, type) =>
+                    {
+                        if (obj is RequestManager requestManager)
+                        {
+                            requestManager.Listen<string>((req, str) =>
+                            {
+                                log.Info($"str: {str}");
+                                req.RespondOk(str + str);
+                            });
+                        }
+                    };
+                };
 
-                PoolablePool<DataWriter>.Shared.Return(writer);
-
-                var reader = PoolablePool<DataReader>.Shared.Rent();
-
-                reader.Set(data);
-
-                log.Info($"Reader: {reader.Buffer.DataSize} bytes");
-
-                var str = reader.Read<string>();
-                var type = reader.Read<Type>();
-
-                log.Info($"String: {str}");
-                log.Info($"Type: {type.FullName}");
+                client.Connect();
             }
-            catch (Exception ex)
+            else
             {
-                log.Error(ex);
+                var server = NetworkServer.Instance;
+
+                server.Add<NetworkParent>();
+
+                server.OnConnected += conn =>
+                {
+                    var parent = conn.Get<NetworkParent>();
+
+                    parent.SpawnObject<RequestManager>(parent.Identity, NetworkRequestType.Current, req =>
+                    {
+                        req.Request<string>("test", (res, str) =>
+                        {
+                            log.Info($"str: {str}");
+                        });
+                    });
+
+                };
+
+                server.Start();
             }
 
             await Task.Delay(-1);

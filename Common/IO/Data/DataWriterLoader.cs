@@ -31,7 +31,7 @@ namespace Common.IO.Data
                     try
                     {
                         foreach (var type in assembly.GetTypes())
-                            OnTypeCached(type, type.FullName, type.FullName.GetStableHash());
+                            OnTypeCached(type, type.FullName, type.GetHash());
                     }
                     catch (Exception ex)
                     {
@@ -66,7 +66,7 @@ namespace Common.IO.Data
             Log.Info("Initialized.");
         }
 
-        private static void OnTypeCached(Type type, string name, ushort hash)
+        private static void OnTypeCached(Type type, string name, int hash)
         {
             try
             {

@@ -11,7 +11,7 @@ namespace Common.Utilities
     public static class AssemblyCache
     {
         private static readonly LockedDictionary<string, Type> typeNames = new LockedDictionary<string, Type>();
-        private static readonly LockedDictionary<ushort, Type> typeHashes = new LockedDictionary<ushort, Type>();
+        private static readonly LockedDictionary<int, Type> typeHashes = new LockedDictionary<int, Type>();
 
         private static readonly List<Assembly> assemblies = new List<Assembly>();
 
@@ -26,7 +26,7 @@ namespace Common.Utilities
         public static bool IsInitialized;
 
         public static event Action<Assembly> OnAssemblyLoaded;
-        public static event Action<Type, string, ushort> OnTypeCached;
+        public static event Action<Type, string, int> OnTypeCached;
 
         static AssemblyCache()
         {
@@ -65,7 +65,7 @@ namespace Common.Utilities
             Log.Verbose($"Cached {assemblies.Count} assemblies ({typeHashes.Count} / {typeNames.Count})");
         }
 
-        public static bool TryRetrieveType(ushort typeHash, out Type type)
+        public static bool TryRetrieveType(int typeHash, out Type type)
         {
             if (typeHashes.TryGetValue(typeHash, out type))
                 return true;
@@ -76,7 +76,7 @@ namespace Common.Utilities
                 {
                     foreach (var asmType in assembly.GetTypes())
                     {
-                        var nameHash = asmType.FullName.GetStableHash();
+                        var nameHash = asmType.AssemblyQualifiedName.GetStableHashCode();
 
                         if (nameHash == typeHash)
                         {
@@ -113,7 +113,7 @@ namespace Common.Utilities
                     {
                         if (asmType.FullName == typeName)
                         {
-                            var nameHash = asmType.FullName.GetStableHash();
+                            var nameHash = asmType.AssemblyQualifiedName.GetStableHashCode();
 
                             typeNames[asmType.FullName] = asmType;
                             typeHashes[nameHash] = asmType;
@@ -141,7 +141,7 @@ namespace Common.Utilities
             {
                 foreach (var type in assembly.GetTypes())
                 {
-                    var nameHash = type.FullName.GetStableHash();
+                    var nameHash = type.AssemblyQualifiedName.GetStableHashCode();
 
                     typeNames[type.FullName] = type;
                     typeHashes[nameHash] = type;
@@ -162,6 +162,8 @@ namespace Common.Utilities
                 if (ev.LoadedAssembly != null)
                 {
                     assemblies.Add(ev.LoadedAssembly);
+
+                    OnAssemblyLoaded.Call(ev.LoadedAssembly);
 
                     if (IsImmediateLoad)
                         FillTypeCache(ev.LoadedAssembly);
