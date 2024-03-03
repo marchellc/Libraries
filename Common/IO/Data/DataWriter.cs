@@ -239,6 +239,18 @@ namespace Common.IO.Data
             WriteLong(ticks);
         }
 
+        public void WriteFile(string filePath)
+        {
+            var data = new FileData(filePath);
+            Write(data);
+        }
+
+        public void WriteFile(string name, string extension, byte[] bytes)
+        {
+            var data = new FileData(name, extension, bytes);
+            Write(data);
+        }
+
         public void WriteVersion(Version v)
         {
             WriteInt(v.Major);
@@ -249,26 +261,14 @@ namespace Common.IO.Data
 
         public void WriteType(Type type)
         {
-            var typeName = type.FullName;
-            WriteString(typeName);
+            var typeCode = type.ToShortCode();
+            WriteUShort(typeCode);
         }
 
-        public void WriteMethod(MethodInfo method)
+        public void WriteMember(MemberInfo member)
         {
-            WriteType(method.DeclaringType);
-            WriteString(method.Name);
-        }
-
-        public void WriteField(FieldInfo field)
-        {
-            WriteType(field.DeclaringType);
-            WriteString(field.Name);
-        }
-
-        public void WriteProperty(PropertyInfo property)
-        {
-            WriteType(property.DeclaringType);
-            WriteString(property.Name);
+            WriteType(member.DeclaringType);
+            WriteUShort(member.ToShortCode());
         }
 
         public void WriteAssemblyImage(Assembly assembly)
@@ -328,6 +328,14 @@ namespace Common.IO.Data
             writer(this, o);
         }
 
+        public void WriteAnonymous<T>(T data) where T : IData
+        {
+            if (data is null)
+                return;
+
+            data.Serialize(this);
+        }
+
         public void Write<T>(T value)
         {
             if (value is null)
@@ -372,6 +380,14 @@ namespace Common.IO.Data
                 Write(item);
         }
 
+        public void WriteEnumerableCustom<T>(IEnumerable<T> values, Action<T> writer)
+        {
+            WriteInt(values.Count());
+
+            foreach (var item in values)
+                writer(item);
+        }
+
         public void WriteDictionary<TKey, TValue>(IDictionary<TKey, TValue> dict)
         {
             WriteInt(dict.Count);
@@ -396,7 +412,7 @@ namespace Common.IO.Data
 
                 var propValue = property.GetValueFast<object>(value);
 
-                WriteInt(property.ToHash());
+                WriteUShort(property.ToShortCode());
                 WriteObject(propValue);
             }
         }

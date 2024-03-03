@@ -2,12 +2,9 @@
 
 using System.Threading.Tasks;
 
-using Common.Utilities;
-
-using Networking.Server;
-using Networking.Components;
-using Networking.Client;
-using Networking.Requests;
+using Common.Utilities.Generation;
+using Common.Caching;
+using Common.IO;
 
 namespace Test
 {
@@ -16,53 +13,26 @@ namespace Test
         public static async Task Main(string[] args)
         {
             var log = new LogOutput("Test").Setup();
+            var cache = new FileCache<byte>();
+            var unique = new UniqueByteGenerator(cache);
+            var watcher = new FileWatcher($"{System.IO.Directory.GetCurrentDirectory()}/cache");
 
-            if (ConsoleArgs.HasSwitch("client"))
+            if (!System.IO.File.Exists($"{System.IO.Directory.GetCurrentDirectory()}/cache"))
+                System.IO.File.Create($"{System.IO.Directory.GetCurrentDirectory()}/cache").Close();
+
+            cache.SaveOnChange = true;
+            cache.DefaultPath = $"{System.IO.Directory.GetCurrentDirectory()}/cache";
+            cache.Load($"{System.IO.Directory.GetCurrentDirectory()}/cache");
+
+            watcher.OnChanged += () =>
             {
-                var client = NetworkClient.Instance;
+                log.Info("Watched cache has changed");
+            };
 
-                client.Add<NetworkParent>();
-
-                client.OnConnected += () =>
-                {
-                    var parent = client.Get<NetworkParent>();
-
-                    parent.OnObjectSpawned += (_, obj, type) =>
-                    {
-                        if (obj is RequestManager requestManager)
-                        {
-                            requestManager.Listen<string>((req, str) =>
-                            {
-                                log.Info($"str: {str}");
-                                req.RespondOk(str + str);
-                            });
-                        }
-                    };
-                };
-
-                client.Connect();
-            }
-            else
+            for (int i = 0; i < 10; i++)
             {
-                var server = NetworkServer.Instance;
-
-                server.Add<NetworkParent>();
-
-                server.OnConnected += conn =>
-                {
-                    var parent = conn.Get<NetworkParent>();
-
-                    parent.SpawnObject<RequestManager>(parent.Identity, NetworkRequestType.Current, req =>
-                    {
-                        req.Request<string>("test", (res, str) =>
-                        {
-                            log.Info($"str: {str}");
-                        });
-                    });
-
-                };
-
-                server.Start();
+                var randomId = unique.Next();
+                log.Info($"New random: {randomId}");
             }
 
             await Task.Delay(-1);

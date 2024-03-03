@@ -1,6 +1,5 @@
 ﻿using Common.Extensions;
 using Common.Logging;
-using Common.Utilities;
 
 using HarmonyLib;
 
@@ -18,13 +17,12 @@ namespace Common.IO.Data
 
         internal static void Initialize()
         {
-            Log = new LogOutput("Reader Loader").Setup();
+            Log = new LogOutput("Reader Loader");
+            Log.Setup();
 
-            AssemblyCache.OnTypeCached += OnTypeCached;
+            AppDomain.CurrentDomain.AssemblyLoad += OnAssemblyLoaded;
 
-            Log.Verbose("Loading data readers ..");
-
-            var curAssemblies = new List<Assembly>(AssemblyCache.Assemblies);
+            var curAssemblies = new List<Assembly>(AppDomain.CurrentDomain.GetAssemblies());
 
             try
             {
@@ -33,17 +31,17 @@ namespace Common.IO.Data
                     try
                     {
                         foreach (var type in assembly.GetTypes())
-                            OnTypeCached(type, type.FullName, type.AssemblyQualifiedName.GetStableHashCode());
+                            SearchType(type);
                     }
-                    catch (Exception ex)
+                    catch
                     {
-                        Log.Error(ex);
+
                     }
                 }
             }
-            catch (Exception ex)
+            catch 
             {
-                Log.Error(ex);
+
             }
 
             try
@@ -60,19 +58,17 @@ namespace Common.IO.Data
                     }
                 }
             }
-            catch (Exception ex)
+            catch
             {
-                Log.Error(ex);
-            }
 
-            Log.Info("Initialized.");
+            }
         }
 
-        private static void OnTypeCached(Type type, string name, int hash)
+        private static void SearchType(Type type)
         {
             try
             {
-                if (name.StartsWith("System.") || name.StartsWith("Microsoft."))
+                if (type.FullName.StartsWith("System.") || type.FullName.StartsWith("Microsoft."))
                     return;
 
                 foreach (var method in type.GetAllMethods())
@@ -109,10 +105,24 @@ namespace Common.IO.Data
                     OnReaderCached.Call(readerType, method, invokeHandler);
                 }
             }
-            catch (Exception ex)
+            catch 
             {
-                Log.Error($"An error occured while reading type '{type.FullName}':\n{ex}");
+
             }
+
+        }
+
+        private static void OnAssemblyLoaded(object _, AssemblyLoadEventArgs ev)
+        {
+            try
+            {
+                if (ev.LoadedAssembly != null)
+                {
+                    foreach (var type in ev.LoadedAssembly.GetTypes())
+                        SearchType(type);
+                }
+            }
+            catch { }
         }
     }
 }

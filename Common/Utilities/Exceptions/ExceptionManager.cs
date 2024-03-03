@@ -81,7 +81,7 @@ namespace Common.Utilities.Exceptions
                         $"\nTrace:" +
                         $"\n{formattedTrace}" +
                         $"\nException:" +
-                        $"\n{exception}");
+                        $"\n{formattedExc}");
             }
         }
     }

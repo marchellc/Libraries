@@ -2,7 +2,7 @@
 {
     public static class TypeInstanceComparer
     {
-        public static bool IsEqual(object instance, object otherInstance, bool countNull = true)
+        public static bool IsEqualTo(this object instance, object otherInstance, bool countNull = true)
         {
             if (instance is null && otherInstance is null)
                 return countNull;

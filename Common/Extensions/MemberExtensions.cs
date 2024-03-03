@@ -11,12 +11,20 @@ namespace Common.Extensions
     {
         private static readonly Dictionary<MemberInfo, string> PreviouslyGeneratedNames = new Dictionary<MemberInfo, string>();
 
-        public static int ToHash(this MemberInfo member)
+        public static int ToLongCode(this MemberInfo member)
         {
             if (member.DeclaringType != null)
-                return $"{member.DeclaringType.AssemblyQualifiedName}^{member.Name}".GetStableHashCode();
+                return $"{member.DeclaringType.AssemblyQualifiedName}^{member.Name}".GetIntegerCode();
 
-            return member.Name.GetStableHashCode();
+            return member.Name.GetIntegerCode();
+        }
+
+        public static ushort ToShortCode(this MemberInfo member)
+        {
+            if (member.DeclaringType != null)
+                return $"{member.DeclaringType.AssemblyQualifiedName}^{member.Name}".GetShortCode();
+
+            return member.Name.GetShortCode();
         }
 
         public static bool HasAttribute<TAttribute>(this MemberInfo member, out TAttribute attribute) where TAttribute : Attribute

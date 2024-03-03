@@ -6,6 +6,11 @@ namespace Common.Utilities
     {
         private bool isDiposed;
 
+        public bool IsDisposed
+        {
+            get => isDiposed;
+        }
+
         public virtual void OnDispose() { }
 
         public void Dispose()

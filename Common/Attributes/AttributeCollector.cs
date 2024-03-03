@@ -95,16 +95,22 @@ namespace Common.Attributes
 
         public static void Collect(MemberInfo member, object typeInstance = null)
         {
-            if (cachedAttributes.Any(a => a.Member == member && TypeInstanceComparer.IsEqual(typeInstance, a.Instance)))
+            if (cachedAttributes.Any(a => a.Member == member && TypeInstanceComparer.IsEqualTo(typeInstance, a.Instance)))
                 return;
 
             if (member.DeclaringType is null || member.DeclaringType.Namespace is null)
                 return;
 
-            if (member.DeclaringType.Namespace.StartsWith("System"))
+            if (member.DeclaringType.Namespace.StartsWith("System") || member.DeclaringType.Assembly.FullName.StartsWith("System"))
                 return;
 
-            if (TypeInstanceValidator.IsValid(member.DeclaringType, typeInstance) != TypeInstanceValidator.ValidatorResult.Ok)
+            if (member.DeclaringType.Namespace.StartsWith("Microsoft") || member.DeclaringType.Assembly.FullName.StartsWith("Microsoft"))
+                return;
+
+            if (member.DeclaringType.Assembly.FullName.Contains("mscorlib"))
+                return;
+
+            if (TypeInstanceValidator.IsValidInstance(member.DeclaringType, typeInstance) != TypeInstanceValidator.ValidatorResult.Ok)
                 return;
 
             var attributes = member.GetCustomAttributes<Attribute>();
@@ -155,7 +161,7 @@ namespace Common.Attributes
 
         public static void Remove(Type type, object typeInstance = null)
         {
-            if (TypeInstanceValidator.IsValid(type, typeInstance) != TypeInstanceValidator.ValidatorResult.Ok)
+            if (TypeInstanceValidator.IsValidInstance(type, typeInstance) != TypeInstanceValidator.ValidatorResult.Ok)
                 return;
 
             foreach (var member in type.GetMembers(flags))
@@ -164,7 +170,7 @@ namespace Common.Attributes
 
         public static void Remove(MemberInfo member, object typeInstance = null)
         {
-            var removed = cachedAttributes.RemoveRange(a => a.Member == member && TypeInstanceComparer.IsEqual(typeInstance, a.Instance));
+            var removed = cachedAttributes.RemoveRange(a => a.Member == member && TypeInstanceComparer.IsEqualTo(typeInstance, a.Instance));
 
             if (removed.Count <= 0)
                 return;

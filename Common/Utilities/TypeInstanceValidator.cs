@@ -4,9 +4,9 @@ namespace Common.Utilities
 {
     public static class TypeInstanceValidator
     {
-        public static bool IsValid(Type type, object instance, bool onlyNotSupplied = false)
+        public static bool IsValidInstance(this Type type, object instance, bool onlyNotSupplied = false)
         {
-            var result = IsValid(type, instance);
+            var result = IsValidInstance(type, instance);
 
             if (result is ValidatorResult.Ok)
                 return true;
@@ -17,7 +17,7 @@ namespace Common.Utilities
             return onlyNotSupplied;
         }
 
-        public static ValidatorResult IsValid(Type type, object instance)
+        public static ValidatorResult IsValidInstance(this Type type, object instance)
         {
             if (type.IsSealed && type.IsAbstract && instance != null)
             {

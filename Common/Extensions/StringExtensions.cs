@@ -200,7 +200,7 @@ namespace Common.Extensions
             return StringBuilderPool.Shared.ToStringReturn(builder);
         }
 
-        public static int GetStableHashCode(this string str)
+        public static int GetIntegerCode(this string str)
         {
             unchecked
             {
@@ -219,6 +219,16 @@ namespace Common.Extensions
 
                 return hash1 + (hash2 * 1566083941);
             }
+        }
+
+        public static ushort GetShortCode(this string text)
+        {
+            var num = 23;
+
+            foreach (var c in text)
+                num = num * 31 + c;
+
+            return (ushort)num;
         }
 
         public static bool TrySplit(this string line, char splitChar, bool removeEmptyOrWhitespace, int? length, out string[] splits)

@@ -1,4 +1,5 @@
 ﻿using Common.Extensions;
+using Common.IO.Collections;
 using Common.Logging;
 
 using Fasterflect;
@@ -6,6 +7,7 @@ using Fasterflect;
 using MonoMod.Utils;
 
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 
@@ -13,6 +15,9 @@ namespace Common.Extensions
 {
     public static class TypeExtensions
     {
+        private static readonly LockedDictionary<Type, Dictionary<ushort, MemberInfo>> shortDiscovery = new LockedDictionary<Type, Dictionary<ushort, MemberInfo>>();
+        private static readonly LockedDictionary<Type, Dictionary<int, MemberInfo>> longDiscovery = new LockedDictionary<Type, Dictionary<int, MemberInfo>>();
+
         public static readonly LogOutput Log = new LogOutput("Type Extensions").Setup();
 
         public static Type ToGeneric(this Type type, Type genericType)
@@ -123,7 +128,56 @@ namespace Common.Extensions
         public static int GetSize(this Type type)
             => type.GetManagedSize();
 
-        public static int GetHash(this Type type)
-            => type.AssemblyQualifiedName.GetStableHashCode();
+        public static int GetLongCode(this Type type)
+            => type.FullName.GetIntegerCode();
+
+        public static ushort GetShortCode(this Type type)
+            => type.FullName.GetShortCode();
+
+        public static MemberInfo FindMember(this Type type, ushort shortCode)
+        {
+            if (!shortDiscovery.TryGetValue(type, out var members))
+            {
+                members = new Dictionary<ushort, MemberInfo>();
+
+                shortDiscovery[type] = members;
+
+                foreach (var searchMember in type.GetMembers(MethodExtensions.BindingFlags))
+                {
+                    if (searchMember.ToShortCode() == shortCode)
+                    {
+                        members[shortCode] = searchMember;
+                        return searchMember;
+                    }
+                }
+
+                return null;
+            }
+
+            return members.TryGetValue(shortCode, out var member) ? member : null;
+        }
+
+        public static MemberInfo FindMember(this Type type, int longCode)
+        {
+            if (!longDiscovery.TryGetValue(type, out var members))
+            {
+                members = new Dictionary<int, MemberInfo>();
+
+                longDiscovery[type] = members;
+
+                foreach (var searchMember in type.GetMembers(MethodExtensions.BindingFlags))
+                {
+                    if (searchMember.ToLongCode() == longCode)
+                    {
+                        members[longCode] = searchMember;
+                        return searchMember;
+                    }
+                }
+
+                return null;
+            }
+
+            return members.TryGetValue(longCode, out var member) ? member : null;
+        }
     }
 }

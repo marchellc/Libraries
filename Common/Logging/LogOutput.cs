@@ -6,7 +6,6 @@ using Common.Utilities;
 
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
 
@@ -28,21 +27,13 @@ namespace Common.Logging
 
         public LogOutput(string source = null)
         {
-            if (string.IsNullOrWhiteSpace(source))
-            {
-                var method = new StackFrame(0).GetMethod();
-
-                if (method is null || method.DeclaringType is null)
-                    Name = Assembly.GetCallingAssembly().GetName().Name;
-                else
-                    Name = $"{method.DeclaringType.Name}";
-            }
-            else
+            if (!string.IsNullOrWhiteSpace(source))
                 Name = source;
 
-            Enabled = LogUtils.General | LogUtils.Debug;
-
+            Enabled = LogUtils.General;
             allOutputs.Add(this);
+
+            Raw($"Created a new logger '{Name}' (level: {Enabled})", ConsoleColor.Cyan);
         }
 
         public LogLevel Enabled { get; set; }
@@ -116,7 +107,7 @@ namespace Common.Logging
         {
             message.Output = this;
 
-            if ((message.Level & Enabled) != 0)
+            if (Enabled.Any(message.Level))
             {
                 foreach (var logger in loggers)
                 {
@@ -201,11 +192,8 @@ namespace Common.Logging
         internal static void Init()
         {
             Common = new LogOutput("Common Library");
-
             Common.AddConsoleIfPresent();
             Common.AddFileWithPrefix("General Log");
-
-            Common.Info("Logging initialized.");
         }
     }
 }

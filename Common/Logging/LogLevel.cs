@@ -1,16 +1,16 @@
-﻿namespace Common.Logging
+﻿using System;
+
+namespace Common.Logging
 {
+    [Flags]
     public enum LogLevel : byte
     {
-        Trace = 0,
-        Debug = 2,
-        Verbose = 4,
-
-        Information = 6,
-
-        Warning = 8,
-
-        Error = 10,
-        Fatal = 12
+        Trace = 2,
+        Debug = 4,
+        Verbose = 8,
+        Information = 16,
+        Warning = 32,
+        Error = 64,
+        Fatal = 128
     }
 }

@@ -47,6 +47,51 @@ namespace Common.Patching
             return Patch(target, callExpression.Method, type);
         }
 
+        public static bool Patch(PatchInfo patch)
+        {
+            try
+            {
+                MethodInfo patchMethod = null;
+
+                switch (patch.Type)
+                {
+                    case PatchType.Prefix:
+                        patchMethod = Patcher.Patch(patch.Target, new HarmonyMethod(patch.Replacement), null, null, null);
+                        break;
+
+                    case PatchType.Postfix:
+                        patchMethod = Patcher.Patch(patch.Target, null, new HarmonyMethod(patch.Replacement), null, null);
+                        break;
+
+                    case PatchType.Finalizer:
+                        patchMethod = Patcher.Patch(patch.Target, null, null, null, new HarmonyMethod(patch.Replacement));
+                        break;
+
+                    case PatchType.Transpiler:
+                        patchMethod = Patcher.Patch(patch.Target, null, null, new HarmonyMethod(patch.Replacement), null);
+                        break;
+
+                    default:
+                        Log.Warn($"Cannot patch '{patch.Target.ToName()}' with '{patch.Replacement.ToName()}': unsupported patch type '{patch.Type}'");
+                        return false;
+                }
+
+                if (patchMethod is null)
+                {
+                    Log.Warn($"Failed to patch method '{patch.Target.ToName()}' with '{patch.Replacement.ToName()}' due to an unknown error.");
+                    return false;
+                }
+
+                patch.Patch = patchMethod;
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Log.Error($"Failed while patching method '{patch.Target.ToName()}' by '{patch.Replacement.ToName()}':\n{ex}");
+                return false;
+            }
+        }
+
         public static bool Patch(MethodBase target, MethodInfo patch, PatchType type)
         {
             try
@@ -166,10 +211,29 @@ namespace Common.Patching
                     continue;
                 }
 
-                patch.IsActive = false;
+                patch.Patch = null;
             }
 
             return patches.RemoveRange(p => !p.IsActive)?.Count ?? 0;
+        }
+
+        public static bool Unpatch(PatchInfo patch)
+        {
+            if (!patch.IsActive)
+                return false;
+
+            try
+            {
+                Patcher.Unpatch(patch.Original, patch.Patch);
+            }
+            catch (Exception ex)
+            {
+                Log.Warn($"Failed to unpatch method '{patch.Target.ToName()}' (patched by '{patch.Replacement.ToName()}'):\n{ex}");
+                return false;
+            }
+
+            patch.Patch = null;
+            return true;
         }
 
         public static int RemoveAllPatchesBy(MethodInfo replacement)
@@ -189,7 +253,7 @@ namespace Common.Patching
                     continue;
                 }
 
-                patch.IsActive = false;
+                patch.Patch = null;
             }
 
             return patches.RemoveRange(p => !p.IsActive)?.Count ?? 0;
@@ -212,7 +276,7 @@ namespace Common.Patching
                     continue;
                 }
 
-                patch.IsActive = false;
+                patch.Patch = null;
             }
 
             return patches.RemoveRange(p => !p.IsActive)?.Count ?? 0;

@@ -4,6 +4,7 @@ using Common.Logging.Console;
 using System;
 using System.IO;
 using System.Runtime.InteropServices;
+using Common.Extensions;
 
 namespace Common.Logging
 {
@@ -85,19 +86,19 @@ namespace Common.Logging
 
         public static LogOutput Enable(this LogOutput output, LogLevel level)
         {
-            if ((output.Enabled & level) != 0)
+            if (output.Enabled.Any(level))
                 return output;
 
-            output.Enabled |= level;
-
+            output.Enabled = output.Enabled.Combine(level);
             return output;
         }
 
         public static LogOutput Disable(this LogOutput output, LogLevel level)
         {
-            if ((output.Enabled & level) != 0)
-                output.Enabled &= ~level;
+            if (!output.Enabled.Any(level))
+                return output;
 
+            output.Enabled = output.Enabled.Remove(level);
             return output;
         }
 

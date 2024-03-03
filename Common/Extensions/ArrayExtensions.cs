@@ -9,7 +9,15 @@ namespace Common.Extensions
     public static class ArrayExtensions
     {
         public static TValue[] CastArray<TValue>(this IEnumerable objects)
-            => objects.Cast<TValue>().ToArray();
+        {
+            var count = objects.Count();
+            var array = new TValue[count];
+
+            for (int i = 0; i < count; i++)
+                array[i] = (TValue)objects.ElementOfIndex(i);
+
+            return array;
+        }
 
         public static bool TryPeekIndex<T>(this T[] array, int index, out T value)
         {

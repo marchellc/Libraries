@@ -29,6 +29,11 @@ namespace Common.IO.Collections
             listLock = new object();
         }
 
+        public List<T> List
+        {
+            get => list;
+        }
+
         public T this[int index]
         {
             get

@@ -1,9 +1,9 @@
 ﻿using Common.Attributes;
 using Common.Attributes.Custom;
 using Common.Logging;
-using Common.Instances;
 using Common.Utilities;
 using Common.Extensions;
+using Common.IO.Data;
 using Common.IO;
 
 using System;
@@ -12,7 +12,6 @@ using System.Reflection;
 using System.Linq;
 using System.Globalization;
 using System.Threading;
-using Common.IO.Data;
 
 namespace Common
 {
@@ -86,10 +85,6 @@ namespace Common
                 LogOutput.Common.Info("Initializing Attribute Manager ..");
 
                 AttributeCollector.Init();
-
-                LogOutput.Common.Info("Initializing Instance Manager ..");
-
-                InstanceManager.Init();
 
                 if (LogUtils.IsConsoleAvailable && !ConsoleArgs.HasSwitch("DisableCommands"))
                 {

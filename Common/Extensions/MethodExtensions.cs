@@ -61,7 +61,7 @@ namespace Common.Extensions
             if (method is null)
                 throw new ArgumentNullException(nameof(method));
 
-            if (!method.IsStatic && !TypeInstanceValidator.IsValid(method.DeclaringType, target, false))
+            if (!method.IsStatic && !TypeInstanceValidator.IsValidInstance(method.DeclaringType, target, false))
                 throw new ArgumentNullException(nameof(target));
 
             try
@@ -107,7 +107,7 @@ namespace Common.Extensions
             if (method is null)
                 throw new ArgumentNullException(nameof(method));
 
-            if (!method.IsStatic && !TypeInstanceValidator.IsValid(method.DeclaringType, target, false))
+            if (!method.IsStatic && !TypeInstanceValidator.IsValidInstance(method.DeclaringType, target, false))
                 throw new ArgumentNullException(nameof(target));
 
             try
@@ -169,6 +169,19 @@ namespace Common.Extensions
                 errorCallback.Call(ex);
                 return null;
             }
+        }
+
+        public static object CallUnsafe(this MethodBase method, object instance, params object[] args)
+        {
+            if (method is MethodInfo info)
+            {
+                var invoker = HarmonyLib.MethodInvoker.GetHandler(info);
+
+                if (invoker != null)
+                    return invoker(instance, args);
+            }
+
+            return method.Invoke(instance, args);
         }
 
         public static MethodInfo CloneToMemory(this MethodBase target)

@@ -1,5 +1,4 @@
-﻿using Common.Logging.Console;
-using Common.Extensions;
+﻿using Common.Extensions;
 using Common.Logging;
 using Common.Values;
 
@@ -160,8 +159,6 @@ namespace Common.Utilities
 
         public static void Delay(Action delayAction, int delay)
         {
-            Log.Verbose($"Delaying method '{delayAction.Method.ToName()}' by '{delay} ms'");
-
             lock (queueLock)
                 delayedExecution.Enqueue(new DelayedExecutionInfo
                 {
@@ -170,6 +167,50 @@ namespace Common.Utilities
                     delay = delay,
                     target = delayAction
                 });
+        }
+
+        public static void InlinedIf(bool condition, bool stopCondition, Action action, Action onAction)
+        {
+            if (stopCondition || !condition)
+                return;
+
+            action.Call(onAction, Log.Error);
+        }
+
+        public static void InlinedIf(Func<bool> condition, Func<bool> stopCondition, Action action, Action onAction)
+        {
+            if (stopCondition.Call(Log.Error) || !condition.Call(Log.Error))
+                return;
+
+            action.Call(onAction, Log.Error);
+        }
+
+        public static void InlinedElse(bool condition, bool stopCondition, Action trueAction, Action falseAction, Action onTrueAction, Action onFalseAction)
+        {
+            if (stopCondition)
+                return;
+
+            if (condition)
+                trueAction.Call(onTrueAction, Log.Error);
+            else
+                falseAction.Call(onFalseAction, Log.Error);
+        }
+
+        public static void InlinedElse(Func<bool> condition, Func<bool> stopCondition, Action trueAction, Action falseAction, Action onTrueAction, Action onFalseAction)
+        {
+            if (stopCondition.Call(Log.Error))
+                return;
+
+            if (condition.Call(Log.Error))
+                trueAction.Call(onTrueAction, Log.Error);
+            else
+                falseAction.Call(onFalseAction, Log.Error);
+        }
+
+        public static T ModifyStruct<T>(this T value, Action<T> modify) where T : struct
+        {
+            modify.Call(value);
+            return value;
         }
     }
 }

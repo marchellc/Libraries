@@ -249,6 +249,9 @@ namespace Common.IO.Data
             return TimeSpan.FromTicks(ticks);
         }
 
+        public FileData ReadFile()
+            => Read<FileData>();
+
         public Version ReadVersion()
         {
             var major = ReadInt();
@@ -261,10 +264,10 @@ namespace Common.IO.Data
 
         public Type ReadType()
         {
-            var typeName = ReadString();
+            var typeCode = ReadUShort();
 
-            if (!AssemblyCache.TryRetrieveType(typeName, out var type))
-                throw new TypeLoadException($"Failed to find type of ID '{typeName}'");
+            if (!TypeSearch.TryFind(typeCode, out var type))
+                throw new TypeLoadException($"Failed to find type of ID '{typeCode}'");
 
             return type;
         }
@@ -282,46 +285,37 @@ namespace Common.IO.Data
         public MethodInfo ReadMethod()
         {
             var type = ReadType();
-            var method = ReadString();
-            var methods = type.GetAllMethods();
+            var methodCode = ReadUShort();
+            var method = type.FindMember(methodCode);
 
-            for (int i = 0; i < methods.Length; i++)
-            {
-                if (methods[i].Name == method)
-                    return methods[i];
-            }
+            if (method != null)
+                return (MethodInfo)method;
 
-            throw new InvalidDataException($"Cannot find method of ID {method} in type {type.FullName}");
+            throw new InvalidDataException($"Cannot find method of ID {methodCode} in type {type.FullName}");
         }
 
         public FieldInfo ReadField()
         {
             var type = ReadType();
-            var field = ReadString();
-            var fields = type.GetAllFields();
+            var fieldCode = ReadUShort();
+            var field = type.FindMember(fieldCode);
 
-            for (int i = 0; i < fields.Length; i++)
-            {
-                if (fields[i].Name == field)
-                    return fields[i];
-            }
+            if (field != null)
+                return (FieldInfo)field;
 
-            throw new InvalidDataException($"Cannot find field of ID {field} in type {type.FullName}");
+            throw new InvalidDataException($"Cannot find field of ID {fieldCode} in type {type.FullName}");
         }
 
         public PropertyInfo ReadProperty()
         {
             var type = ReadType();
-            var property = ReadString();
-            var properties = type.GetAllProperties();
+            var propertyCode = ReadUShort();
+            var property = type.FindMember(propertyCode);
 
-            for (int i = 0; i < properties.Length; i++)
-            {
-                if (properties[i].Name == property)
-                    return properties[i];
-            }
+            if (property != null)
+                return (PropertyInfo)property;
 
-            throw new InvalidDataException($"Cannot find property of ID {property} in type {type.FullName}");
+            throw new InvalidDataException($"Cannot find property of ID {propertyCode} in type {type.FullName}");
         }
         
         public DataReader ReadReader()
@@ -365,12 +359,22 @@ namespace Common.IO.Data
                 var data = objectType.Construct<IData>();
 
                 data.Deserialize(this);
+
                 return data;
             }
 
             var reader = DataReaderUtils.GetReader(objectType);
 
             return reader(this);
+        }
+
+        public T ReadAnonymous<T>(Type type) where T : IData
+        {
+            var data = type.Construct<T>();
+
+            data.Deserialize(this);
+
+            return data;
         }
 
         public T Read<T>(T defaultValue = default)
@@ -422,6 +426,20 @@ namespace Common.IO.Data
             return array;
         }
 
+        public T[] ReadArrayCustom<T>(Func<T> reader)
+        {
+            var size = ReadInt();
+            var array = new T[size];
+
+            if (size == 0)
+                return array;
+
+            for (int i = 0; i < size; i++)
+                array[i] = reader();
+
+            return array;
+        }
+
         public void ReadIntoArray<T>(T[] destination, int start = 0)
         {
             var size = ReadInt();
@@ -434,6 +452,20 @@ namespace Common.IO.Data
 
             for (int i = 0; i < size; i++)
                 destination[i + start] = Read<T>();
+        }
+
+        public void ReadIntoArrayCustom<T>(T[] destination, int start, Func<T> reader)
+        {
+            var size = ReadInt();
+
+            if (size == 0)
+                return;
+
+            if (size > destination.Length)
+                throw new Exception($"Destination array is smaller than required.");
+
+            for (int i = 0; i < size; i++)
+                destination[i + start] = reader();
         }
 
         public List<T> ReadList<T>()
@@ -507,29 +539,17 @@ namespace Common.IO.Data
 
             var type = typeof(T);
             var count = ReadInt();
-            var properties = type.GetAllProperties();
-
-            PropertyInfo FindProperty(int propertyHash)
-            {
-                for (int x = 0; x < properties.Length; x++)
-                {
-                    if (properties[x].ToHash() == propertyHash)
-                        return properties[x];
-                }
-
-                return null;
-            }
 
             for (int i = 0; i < count; i++)
             {
-                var propertyHash = ReadInt();
+                var propertyHash = ReadUShort();
                 var propertyValue = ReadObject();
-                var property = FindProperty(propertyHash);
+                var property = type.FindMember(propertyHash);
 
                 if (property is null)
                     throw new InvalidDataException($"Property of ID {propertyHash} was not present in type {type.FullName}");
 
-                property.SetValueFast(propertyValue, value);
+                (property as PropertyInfo).SetValueFast(propertyValue, value);
             }
         }
 

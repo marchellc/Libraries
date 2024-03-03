@@ -49,20 +49,13 @@
     <Reference Include="Microsoft.Bcl.AsyncInterfaces, Version=8.0.0.0, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
       <HintPath>..\packages\Microsoft.Bcl.AsyncInterfaces.8.0.0\lib\net462\Microsoft.Bcl.AsyncInterfaces.dll</HintPath>
     </Reference>
-    <Reference Include="Microsoft.Win32.Primitives, Version=4.0.2.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
-      <HintPath>..\packages\Microsoft.Win32.Primitives.4.3.0\lib\net46\Microsoft.Win32.Primitives.dll</HintPath>
-      <Private>True</Private>
-      <Private>True</Private>
-    </Reference>
     <Reference Include="ModuleInit, Version=2.1.1.0, Culture=neutral, PublicKeyToken=409b3227471b0f0d, processorArchitecture=MSIL">
       <HintPath>..\packages\ModuleInit.Fody.2.1.1\lib\net452\ModuleInit.dll</HintPath>
     </Reference>
-    <Reference Include="System" />
-    <Reference Include="System.AppContext, Version=4.1.1.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
-      <HintPath>..\packages\System.AppContext.4.3.0\lib\net463\System.AppContext.dll</HintPath>
-      <Private>True</Private>
-      <Private>True</Private>
+    <Reference Include="Newtonsoft.Json, Version=13.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
+      <HintPath>..\packages\Newtonsoft.Json.13.0.3\lib\net45\Newtonsoft.Json.dll</HintPath>
     </Reference>
+    <Reference Include="System" />
     <Reference Include="System.Buffers, Version=4.0.3.0, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
       <HintPath>..\packages\System.Buffers.4.5.1\lib\net461\System.Buffers.dll</HintPath>
     </Reference>
@@ -70,20 +63,7 @@
       <HintPath>..\packages\System.CodeDom.8.0.0\lib\net462\System.CodeDom.dll</HintPath>
     </Reference>
     <Reference Include="System.ComponentModel.Composition" />
-    <Reference Include="System.Console, Version=4.0.1.1, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
-      <HintPath>..\packages\System.Console.4.3.1\lib\net46\System.Console.dll</HintPath>
-      <Private>True</Private>
-      <Private>True</Private>
-    </Reference>
     <Reference Include="System.Core" />
-    <Reference Include="System.Diagnostics.DiagnosticSource, Version=8.0.0.0, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
-      <HintPath>..\packages\System.Diagnostics.DiagnosticSource.8.0.0\lib\net462\System.Diagnostics.DiagnosticSource.dll</HintPath>
-    </Reference>
-    <Reference Include="System.Diagnostics.Tracing, Version=4.1.1.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
-      <HintPath>..\packages\System.Diagnostics.Tracing.4.3.0\lib\net462\System.Diagnostics.Tracing.dll</HintPath>
-      <Private>True</Private>
-      <Private>True</Private>
-    </Reference>
     <Reference Include="System.Globalization.Calendars, Version=4.0.2.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
       <HintPath>..\packages\System.Globalization.Calendars.4.3.0\lib\net46\System.Globalization.Calendars.dll</HintPath>
       <Private>True</Private>
@@ -171,6 +151,9 @@
       <Private>True</Private>
       <Private>True</Private>
     </Reference>
+    <Reference Include="System.Security.AccessControl, Version=5.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
+      <HintPath>..\packages\System.Security.AccessControl.5.0.0\lib\net461\System.Security.AccessControl.dll</HintPath>
+    </Reference>
     <Reference Include="System.Security.Cryptography.Algorithms, Version=4.2.1.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
       <HintPath>..\packages\System.Security.Cryptography.Algorithms.4.3.1\lib\net463\System.Security.Cryptography.Algorithms.dll</HintPath>
       <Private>True</Private>
@@ -190,6 +173,12 @@
       <HintPath>..\packages\System.Security.Cryptography.X509Certificates.4.3.2\lib\net461\System.Security.Cryptography.X509Certificates.dll</HintPath>
       <Private>True</Private>
       <Private>True</Private>
+    </Reference>
+    <Reference Include="System.Security.Principal.Windows, Version=5.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
+      <HintPath>..\packages\System.Security.Principal.Windows.5.0.0\lib\net461\System.Security.Principal.Windows.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Text.Encoding.CodePages, Version=5.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
+      <HintPath>..\packages\System.Text.Encoding.CodePages.5.0.0\lib\net461\System.Text.Encoding.CodePages.dll</HintPath>
     </Reference>
     <Reference Include="System.Text.Encodings.Web, Version=8.0.0.0, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
       <HintPath>..\packages\System.Text.Encodings.Web.8.0.0\lib\net462\System.Text.Encodings.Web.dll</HintPath>
@@ -220,8 +209,14 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Caching\FileCache.cs" />
+    <Compile Include="Caching\ICache.cs" />
+    <Compile Include="Caching\MemoryCache.cs" />
+    <Compile Include="Extensions\CachingExtensions.cs" />
+    <Compile Include="Extensions\ObjectExtensions.cs" />
     <Compile Include="Extensions\StackExtensions.cs" />
     <Compile Include="Extensions\StringBuilderExtensions.cs" />
+    <Compile Include="Extensions\ThreadingExtensions.cs" />
     <Compile Include="IO\Data\AssemblyImageData.cs" />
     <Compile Include="IO\Data\DataCompression.cs" />
     <Compile Include="IO\Data\DataReader.cs" />
@@ -231,8 +226,11 @@
     <Compile Include="IO\Data\DataWriterAttribute.cs" />
     <Compile Include="IO\Data\DataWriterLoader.cs" />
     <Compile Include="IO\Data\DataWriterUtils.cs" />
+    <Compile Include="IO\Data\FileData.cs" />
     <Compile Include="IO\Data\IData.cs" />
     <Compile Include="IO\Data\DataReaderLoader.cs" />
+    <Compile Include="IO\FileLockUtils.cs" />
+    <Compile Include="IO\FileWatcher.cs" />
     <Compile Include="Patching\PatchAttribute.cs" />
     <Compile Include="Patching\PatchInfo.cs" />
     <Compile Include="Patching\PatchManager.cs" />
@@ -240,7 +238,6 @@
     <Compile Include="Patching\PatchUtils.cs" />
     <Compile Include="Pooling\Pool.cs" />
     <Compile Include="Pooling\Pools\ArrayPool.cs" />
-    <Compile Include="Utilities\AssemblyCache.cs" />
     <Compile Include="Utilities\ByteBuffer.cs" />
     <Compile Include="Utilities\CodeUtils.cs" />
     <Compile Include="Utilities\ConsoleArgs.cs" />
@@ -271,14 +268,8 @@
     <Compile Include="Utilities\Chance.cs" />
     <Compile Include="Utilities\FastByteConverter.cs" />
     <Compile Include="Utilities\Generation\BasicGenerator.cs" />
-    <Compile Include="Utilities\Generation\ByteId.cs" />
     <Compile Include="Extensions\ReaderExtensions.cs" />
     <Compile Include="Extensions\WriterExtensions.cs" />
-    <Compile Include="Instances\InstanceAttribute.cs" />
-    <Compile Include="Instances\InstanceDescriptor.cs" />
-    <Compile Include="Instances\InstanceManager.cs" />
-    <Compile Include="Instances\InstanceUtils.cs" />
-    <Compile Include="Instances\InstantiateAttribute.cs" />
     <Compile Include="IO\Collections\LockedDictionary.cs" />
     <Compile Include="IO\Directory.cs" />
     <Compile Include="IO\File.cs" />
@@ -310,29 +301,40 @@
     <Compile Include="Utilities\Exceptions\ExceptionManager.cs" />
     <Compile Include="Utilities\Exceptions\ExceptionSettings.cs" />
     <Compile Include="Utilities\Exceptions\ExceptionUtils.cs" />
+    <Compile Include="Utilities\Generation\UniqueByteGenerator.cs" />
+    <Compile Include="Utilities\Generation\UniqueGenerator.cs" />
+    <Compile Include="Utilities\Generation\UniqueInt16Generator.cs" />
+    <Compile Include="Utilities\Generation\UniqueInt32Generator.cs" />
+    <Compile Include="Utilities\Generation\UniqueStringGenerator.cs" />
     <Compile Include="Utilities\Generator.cs" />
     <Compile Include="Utilities\HardwareId.cs" />
     <Compile Include="Utilities\IndexUtils.cs" />
     <Compile Include="Utilities\Instruction.cs" />
+    <Compile Include="Utilities\JsonUtils.cs" />
     <Compile Include="Utilities\RegexUtils.cs" />
     <Compile Include="Utilities\ServiceCollection.cs" />
+    <Compile Include="Utilities\Threading\IThreadManager.cs" />
+    <Compile Include="Utilities\Threading\ThreadAction.cs" />
+    <Compile Include="Utilities\Threading\ThreadResult.cs" />
     <Compile Include="Utilities\TypeInstanceComparer.cs" />
     <Compile Include="Utilities\TypeInstanceValidator.cs" />
+    <Compile Include="Utilities\TypeSearch.cs" />
     <Compile Include="Utilities\WrappedAction.cs" />
     <Compile Include="Values\IGetValue.cs" />
     <Compile Include="Values\ISetValue.cs" />
     <Compile Include="Values\IValue.cs" />
     <Compile Include="Values\IWrapper.cs" />
+    <Compile Include="Values\OptionalValue.cs" />
     <Compile Include="Values\RecordedValue.cs" />
     <Compile Include="Values\ReferenceValue.cs" />
     <Compile Include="Values\StatusValue.cs" />
     <Compile Include="Values\WeakValue.cs" />
   </ItemGroup>
-  <ItemGroup />
   <ItemGroup>
     <None Include="app.config" />
     <None Include="packages.config" />
   </ItemGroup>
+  <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
     <PropertyGroup>
@@ -340,8 +342,6 @@
     </PropertyGroup>
     <Error Condition="!Exists('..\packages\ModuleInit.Fody.2.1.1\build\ModuleInit.Fody.props')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\ModuleInit.Fody.2.1.1\build\ModuleInit.Fody.props'))" />
     <Error Condition="!Exists('..\packages\Fody.6.8.0\build\Fody.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\Fody.6.8.0\build\Fody.targets'))" />
-    <Error Condition="!Exists('..\packages\NETStandard.Library.2.0.3\build\netstandard2.0\NETStandard.Library.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\NETStandard.Library.2.0.3\build\netstandard2.0\NETStandard.Library.targets'))" />
   </Target>
   <Import Project="..\packages\Fody.6.8.0\build\Fody.targets" Condition="Exists('..\packages\Fody.6.8.0\build\Fody.targets')" />
-  <Import Project="..\packages\NETStandard.Library.2.0.3\build\netstandard2.0\NETStandard.Library.targets" Condition="Exists('..\packages\NETStandard.Library.2.0.3\build\netstandard2.0\NETStandard.Library.targets')" />
 </Project>

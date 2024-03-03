@@ -1,4 +1,5 @@
 ﻿using Common.Pooling.Pools;
+using Common.Utilities;
 
 using System.Collections.Generic;
 using System.IO;
@@ -23,6 +24,23 @@ namespace Common.IO
         {
             if (!Exists)
                 Create();
+        }
+
+        public static bool IsLocked(string path)
+        {
+            var isLocked = !FileLockUtils.TryOpen(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.ReadWrite, out var stream);
+
+            if (stream != null)
+            {
+                try
+                {
+                    stream.Close();
+                    stream.Dispose();
+                }
+                catch { }
+            }
+
+            return isLocked;
         }
 
         public static byte[] Read(string path)
@@ -127,5 +145,59 @@ namespace Common.IO
                     bw.Write(b);
             }
         }
+
+        public static T Read<T>(string directory, string file, T defaultValue)
+        {
+            if (!file.EndsWith(".json"))
+                file += ".json";
+
+            if (!System.IO.Directory.Exists(directory))
+                System.IO.Directory.CreateDirectory(directory);
+
+            var fullPath = $"{directory}/{file}";
+
+            if (!System.IO.File.Exists(fullPath))
+            {
+                Write(directory, file, defaultValue);
+                return defaultValue;
+            }
+
+            try
+            {
+                var json = System.IO.File.ReadAllText(fullPath);
+                var result = json.JsonDeserialize<T>();
+
+                return result;
+            }
+            catch
+            {
+                Write(directory, file, defaultValue);
+                return defaultValue;
+            }
+        }
+
+        public static T ReadCurrent<T>(string file, T defaultValue)
+            => Read(System.IO.Directory.GetCurrentDirectory(), file, defaultValue);
+
+        public static void Write(string directory, string file, object value)
+        {
+            if (!file.EndsWith(".json"))
+                file += ".json";
+
+            if (!System.IO.Directory.Exists(directory))
+                System.IO.Directory.CreateDirectory(directory);
+
+            var fullPath = $"{directory}/{file}";
+
+            try
+            {
+                var json = value.JsonSerialize();
+                System.IO.File.WriteAllText(fullPath, json);
+            }
+            catch { }
+        }
+
+        public static void WriteCurrent(string file, object value)
+            => Write(System.IO.Directory.GetCurrentDirectory(), file, value);
     }
 }
