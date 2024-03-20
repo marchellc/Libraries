@@ -2,7 +2,6 @@
 using Common.IO.Collections;
 using Common.IO.Data;
 using Common.Logging;
-using Common.Utilities;
 
 using Networking.Data;
 using Networking.Enums;
@@ -30,7 +29,7 @@ namespace Networking.Peer
 
         public IServer Server { get; }
 
-        public Guid Id { get; }
+        public int Id { get; }
 
         public IPEndPoint LocalAddress { get; }
         public IPEndPoint RemoteAddress { get; }
@@ -46,7 +45,7 @@ namespace Networking.Peer
 
         public IComponent[] Components => components.ToArray();
 
-        public NetPeer(NetServer server, Guid clientId, IPEndPoint remoteAddress, IPEndPoint localAddress, IEnumerable<Type> preloads)
+        public NetPeer(NetServer server, int clientId, IPEndPoint remoteAddress, IPEndPoint localAddress, IEnumerable<Type> preloads)
         {
             this.server = server;
             this.preloads = preloads;
@@ -141,51 +140,57 @@ namespace Networking.Peer
             server = null;
         }
 
-        public void Process(byte[] data)
+        public void Process(byte[] bytes)
         {
-            DataReader.Read(data, reader =>
+            DataReader.Read(bytes, reader =>
             {
                 try
                 {
-                    var pack = reader.Read<NetPack>();
+                    var msg = reader.ReadObject();
 
-                    if (pack.ReadSize != pack.ValidSize)
-                        Log.Warn($"Received a corrupted data pack! ({pack.ValidSize} / {pack.ReadSize})");
-
-                    for (int i = 0; i < pack.ValidSize; i++)
+                    if (msg is null)
                     {
-                        try
-                        {
-                            var handled = false;
+                        Log.Warn($"Received a null message.");
+                        return;
+                    }
 
-                            foreach (var component in components)
+                    if (msg is not IData data)
+                    {
+                        Log.Warn($"Received an unknown message type: {msg.GetType().FullName}");
+                        return;
+                    }
+
+                    try
+                    {
+                        var handled = false;
+
+                        foreach (var component in components)
+                        {
+                            try
                             {
-                                try
+                                if (component is ITarget target && target.TryProcess(data))
                                 {
-                                    if (component is ITarget target && target.TryProcess(pack.Pack[i]))
-                                    {
-                                        handled = true;
-                                        continue;
-                                    }
-                                }
-                                catch (Exception ex)
-                                {
-                                    Log.Error($"Component '{component.GetType().FullName}' failed to handle message i={i} / {pack.ValidSize} ({pack.Pack[i].GetType().FullName}):\n{ex}");
+                                    handled = true;
+                                    continue;
                                 }
                             }
+                            catch (Exception ex)
+                            {
+                                Log.Error($"Component '{component.GetType().FullName}' failed to handle message {msg.GetType().FullName}:\n{ex}");
+                            }
+                        }
 
-                            if (!handled)
-                                Log.Warn($"There aren't any valid data handlers present for message '{pack.Pack[i].GetType().FullName}'");
-                        }
-                        catch (Exception ex)
-                        {
-                            Log.Error($"Failed to handle message i={i} / {pack.ValidSize} ({pack.Pack[i].GetType().FullName}):\n{ex}");
-                        }
+                        if (!handled)
+                            Log.Warn($"There aren't any valid data handlers present for message '{msg.GetType().FullName}'");
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Error($"Failed to handle message {msg.GetType().FullName}:\n{ex}");
                     }
                 }
                 catch (Exception ex)
                 {
-                    Log.Error($"Failed to process incoming data!\n{ex}");
+                    Log.Error($"An error occured while reading incoming data!\n{ex}");
                 }
             });
         }

@@ -2,23 +2,24 @@
 using Common.IO.Collections;
 using Common.IO.Data;
 using Common.Logging;
+using Common.Utilities;
 
 using Networking.Data;
-
 using Networking.Enums;
 using Networking.Interfaces;
+using Networking.Kcp;
 
 using System;
 using System.Linq;
 using System.Net;
-using System.Threading.Tasks;
-using WatsonTcp;
 
 namespace Networking.Client
 {
     public class NetClient : 
         IClient
     {
+        private static readonly KcpConfig config;
+
         private readonly LockedList<IComponent> components;
         private readonly LockedList<Type> preload;
 
@@ -28,7 +29,7 @@ namespace Networking.Client
         private NetListener listener;
         private NetSender sender;
 
-        private WatsonTcpClient client;
+        private KcpClient client;
 
         public readonly LogOutput Log;
 
@@ -42,14 +43,31 @@ namespace Networking.Client
         public ClientType Type => ClientType.Client;
 
         public bool IsRunning => client != null;
-        public bool IsConnected => client != null && client.Connected;
+        public bool IsConnected => client != null && client.connected;
 
         public IComponent[] Components => components.ToArray();
 
         public event Action OnConnected;
         public event Action OnDisconnected;
 
-        public static NetClient Instance { get; } = new NetClient();
+        public static NetClient Instance { get; }
+
+        static NetClient()
+        {
+            config = new KcpConfig(
+                        NoDelay: true,
+                        DualMode: false,
+                        CongestionWindow: false,
+
+                        Interval: 10,
+                        Timeout: 5000,
+
+                        SendWindowSize: KcpSocket.WND_SND * 1000,
+                        ReceiveWindowSize: KcpSocket.WND_RCV * 1000,
+                        MaxRetransmits: KcpSocket.DEADLINK * 2);
+
+            Instance = new NetClient();
+        }
 
         public NetClient()
         {
@@ -58,6 +76,8 @@ namespace Networking.Client
 
             Log = new LogOutput("NetClient");
             Log.Setup();
+
+            CodeUtils.WhileTrue(() => true, Tick, (int)config.Interval);
         }
 
         public void Start()
@@ -69,17 +89,12 @@ namespace Networking.Client
             {
                 if (client != null)
                 {
-                    if (client.Connected)
+                    if (client.connected)
                     {
                         Stop();
                         return;
                     }
 
-                    client.Events.MessageReceived -= OnServerData;
-                    client.Events.ServerConnected -= OnServerConnected;
-                    client.Events.ServerDisconnected -= OnServerDisconnected;
-
-                    client.Dispose();
                     client = null;
                 }
             }
@@ -102,24 +117,16 @@ namespace Networking.Client
 
             Log.Info($"Connecting to: {target}");
 
-            if (client is null)
-            {
-                client = new WatsonTcpClient(target.Address.ToString(), target.Port);
+            client = new KcpClient(
+                OnServerConnected,
+                OnServerData,
+                OnServerDisconnected,
+                OnServerError,
 
-                client.Settings.NoDelay = true;
-
-                client.Keepalive.EnableTcpKeepAlives = true;
-                client.Keepalive.TcpKeepAliveInterval = 1;
-                client.Keepalive.TcpKeepAliveTime = 1;
-
-                client.Events.MessageReceived += OnServerData;
-                client.Events.ServerConnected += OnServerConnected;
-                client.Events.ServerDisconnected += OnServerDisconnected;
-            }
+                config);
 
             remoteIp = target;
-
-            NetClientConnector.ConnectIndefinitely(client);
+            NetClientConnector.ConnectIndefinitely(client, remoteIp);
         }
 
         public T Get<T>() where T : IComponent
@@ -172,11 +179,12 @@ namespace Networking.Client
 
             try
             {
-                Task.Run(async () => await client.SendAsync(data));
+                Log.Verbose($"Sending {data.Length} bytes");
+                client.Send(data.ToSegment(), KcpChannel.Reliable);
             }
             catch (Exception ex)
             {
-                Log.Error($"TCP failed to send data to server!\n{ex}");
+                Log.Error($"KCP failed to send data to server!\n{ex}");
             }
         }
 
@@ -224,7 +232,7 @@ namespace Networking.Client
             }
         }
 
-        private void OnServerConnected(object _, ConnectionEventArgs ev)
+        private void OnServerConnected()
         {
             try
             {
@@ -259,7 +267,7 @@ namespace Networking.Client
             }
         }
 
-        private void OnServerDisconnected(object _, DisconnectionEventArgs ev)
+        private void OnServerDisconnected()
         {
             try
             {
@@ -273,20 +281,8 @@ namespace Networking.Client
 
                 components.Clear();
 
-                if (ev.Reason != DisconnectReason.Shutdown)
-                {
-                    Log.Info("Attempting to reconnect ..");
-
-                    NetClientConnector.ConnectIndefinitely(client);
-                    return;
-                }
-
-                preload.Clear();
-
-                localIp = null;
-                remoteIp = null;
-
-                Stop();
+                Log.Info("Attempting to reconnect ..");
+                NetClientConnector.ConnectIndefinitely(client, remoteIp);
             }
             catch (Exception ex)
             {
@@ -294,46 +290,58 @@ namespace Networking.Client
             }
         }
 
-        private void OnServerData(object _, MessageReceivedEventArgs ev)
+        private void OnServerError(KcpErrorCode errorCode, string msg)
         {
-            DataReader.Read(ev.Data, reader =>
+            Log.Error($"Caught an error ({errorCode}): {msg ?? "no message"}");
+        }
+
+        private void OnServerData(ArraySegment<byte> data, KcpChannel channel)
+        {
+            Log.Verbose($"Received {data.Count} @ {channel}");
+            DataReader.Read(data.ToArray(), reader =>
             {
                 try
                 {
-                    var pack = reader.Read<NetPack>();
+                    var msg = reader.ReadObject();
 
-                    if (pack.ReadSize != pack.ValidSize)
-                        Log.Warn($"Received a corrupted data pack! ({pack.ValidSize} / {pack.ReadSize})");
-
-                    for (int i = 0; i < pack.ValidSize; i++)
+                    if (msg is null)
                     {
-                        try
-                        {
-                            var handled = false;
+                        Log.Warn($"Received a null message.");
+                        return;
+                    }
 
-                            foreach (var component in components)
+                    if (msg is not IData data)
+                    {
+                        Log.Warn($"Received an unknown message type: {msg.GetType().FullName}");
+                        return;
+                    }
+
+                    try
+                    {
+                        var handled = false;
+
+                        foreach (var component in components)
+                        {
+                            try
                             {
-                                try
+                                if (component is ITarget target && target.TryProcess(data))
                                 {
-                                    if (component is ITarget target && target.TryProcess(pack.Pack[i]))
-                                    {
-                                        handled = true;
-                                        continue;
-                                    }
-                                }
-                                catch (Exception ex)
-                                {
-                                    Log.Error($"Component '{component.GetType().FullName}' failed to handle message i={i} / {pack.ValidSize} ({pack.Pack[i].GetType().FullName}):\n{ex}");
+                                    handled = true;
+                                    continue;
                                 }
                             }
+                            catch (Exception ex)
+                            {
+                                Log.Error($"Component '{component.GetType().FullName}' failed to handle message {msg.GetType().FullName}:\n{ex}");
+                            }
+                        }
 
-                            if (!handled)
-                                Log.Warn($"There aren't any valid data handlers present for message '{pack.Pack[i].GetType().FullName}'");
-                        }
-                        catch (Exception ex)
-                        {
-                            Log.Error($"Failed to handle message i={i} / {pack.ValidSize} ({pack.Pack[i].GetType().FullName}):\n{ex}");
-                        }
+                        if (!handled)
+                            Log.Warn($"There aren't any valid data handlers present for message '{msg.GetType().FullName}'");
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Error($"Failed to handle message {msg.GetType().FullName}:\n{ex}");
                     }
                 }
                 catch (Exception ex)
@@ -341,6 +349,18 @@ namespace Networking.Client
                     Log.Error($"An error occured while reading incoming data!\n{ex}");
                 }
             });
+        }
+
+        private void Tick()
+        {
+            if (client is null)
+                return;
+
+            try
+            {
+                client.Tick();
+            }
+            catch { }
         }
     }
 }

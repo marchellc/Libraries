@@ -26,17 +26,17 @@ namespace Networking.Entities.Messages
         public void Deserialize(DataReader reader)
         {
             Id = reader.ReadCompressedULong();
-            Code = reader.ReadUShort();
             Args = reader.ReadArray<object>();
             Type = (NetEntityEntryType)reader.ReadByte();
+            Code = reader.ReadUShort();
         }
 
         public void Serialize(DataWriter writer)
         {
             writer.WriteCompressedULong(Id);
-            writer.WriteUShort(Code);
             writer.WriteEnumerable(Args);
             writer.WriteByte((byte)Type);
+            writer.WriteUShort(Code);
         }
 
         public class NetEntityDataMessageListener : NetEntityDataListener<NetEntityDataMessage>

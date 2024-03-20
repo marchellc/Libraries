@@ -46,13 +46,16 @@ namespace Common.IO.Data
             {
                 foreach (var method in typeof(DataReader).GetAllMethods())
                 {
+                    if (method.HasAttribute<DataLoaderIgnoreAttribute>())
+                        continue;
+
                     if (method.IsPublic && method.Name.StartsWith("Read") && method.Parameters().Length == 0 && !method.ContainsGenericParameters)
                     {
                         var type = method.ReturnType;
 
                         DataReaderUtils.Readers[type] = DataReaderUtils.ReaderMethodToDelegate(method);
 
-                        Log.Verbose($"Cached default reader for '{type.FullName}': {method.ToName()}");
+                        Log.Info($"Cached default reader for '{type.FullName}': {method.ToName()}");
                     }
                 }
             }
@@ -74,6 +77,9 @@ namespace Common.IO.Data
                     if (!method.IsStatic)
                         continue;
 
+                    if (method.HasAttribute<DataLoaderIgnoreAttribute>())
+                        continue;
+
                     var methodParams = method.Parameters();
 
                     if (methodParams.Length != 1 || methodParams[0].ParameterType != typeof(DataReader))
@@ -91,9 +97,9 @@ namespace Common.IO.Data
                             var invokeHandler = MethodInvoker.GetHandler(method);
                             DataReaderUtils.Readers[readerType] = reader => invokeHandler(null, reader);
                         }
-                        catch (Exception ex)
+                        catch
                         {
-                            Log.Warn($"Failed to create fast invoke handler for method '{method.ToName()}', falling back to reflection:\n{ex}");
+                            Log.Warn($"Failed to create fast invoke handler for method '{method.ToName()}', falling back to reflection");
                             DataReaderUtils.Readers[readerType] = reader => method.Invoke(reader, null);
                         }
                     }
@@ -102,7 +108,7 @@ namespace Common.IO.Data
                         DataReaderUtils.Readers[readerType] = reader => method.Invoke(reader, null);
                     }
 
-                    Log.Verbose($"Cached data reader: ({readerType.FullName}) {method.ToName()}");
+                    Log.Info($"Cached data reader: ({readerType.FullName}) {method.ToName()}");
                 }
             }
             catch 

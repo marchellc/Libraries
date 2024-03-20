@@ -4,6 +4,9 @@ using Common.Values;
 
 using System;
 using System.Collections.Concurrent;
+using System.Diagnostics;
+using System.Linq;
+using System.Reflection;
 using System.Threading;
 
 namespace Common.Utilities
@@ -211,6 +214,18 @@ namespace Common.Utilities
         {
             modify.Call(value);
             return value;
+        }
+
+        public static MethodBase ResolveCaller()
+        {
+            var trace = new StackTrace();
+            var frames = trace.GetFrames();
+            var frame = frames.Skip(2).FirstOrDefault();
+
+            if (frame != null)
+                return frame.GetMethod();
+
+            return null;
         }
     }
 }

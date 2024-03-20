@@ -1,5 +1,6 @@
 ﻿using Common.Attributes;
 using Common.Attributes.Custom;
+using Common.Pooling.Pools;
 using Common.Logging;
 using Common.Utilities;
 using Common.Extensions;
@@ -9,7 +10,6 @@ using Common.IO;
 using System;
 using System.Diagnostics;
 using System.Reflection;
-using System.Linq;
 using System.Globalization;
 using System.Threading;
 
@@ -176,6 +176,67 @@ namespace Common
                     return cachedAppName = System.IO.Path.GetFileNameWithoutExtension(proc.ProcessName);
             }
             catch { return "Default App"; } 
+        }
+
+        public static Type[] SafeQueryTypes()
+        {
+            var assemblies = ListPool<Assembly>.Shared.Rent();
+
+            try
+            {
+                foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+                {
+                    try
+                    {
+                        assemblies.Add(asm);
+                    }
+                    catch { }
+                }
+            }
+            catch { }
+
+            try
+            {
+                var curAsm = Assembly.GetExecutingAssembly();
+
+                if (!assemblies.Contains(curAsm))
+                    assemblies.Add(curAsm);
+            }
+            catch { }
+
+            try
+            {
+                var callAsm = Assembly.GetCallingAssembly();
+
+                if (callAsm != null)
+                    assemblies.Add(callAsm);
+            }
+            catch { }
+
+            var types = ListPool<Type>.Shared.Rent();
+
+            try
+            {
+                foreach (var assembly in assemblies)
+                {
+                    try
+                    {
+                        foreach (var type in assembly.GetTypes())
+                        {
+                            try
+                            {
+                                types.Add(type);
+                            }
+                            catch { }
+                        }
+                    }
+                    catch { }
+                }
+            }
+            catch { }
+
+            ListPool<Assembly>.Shared.Return(assemblies);
+            return ListPool<Type>.Shared.ToArrayReturn(types);
         }
     }
 }

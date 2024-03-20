@@ -26,7 +26,7 @@ namespace Networking.Entities.Messages
 
         public void Deserialize(DataReader reader)
         {
-            Type = reader.Read<NetEntityMessageType>();
+            Type = (NetEntityMessageType)reader.ReadByte();
 
             if (Type is NetEntityMessageType.Confirmation)
             {
@@ -39,7 +39,7 @@ namespace Networking.Entities.Messages
 
         public void Serialize(DataWriter writer)
         {
-            writer.Write(Type);
+            writer.WriteByte((byte)Type);
 
             if (Type is NetEntityMessageType.Confirmation)
             {

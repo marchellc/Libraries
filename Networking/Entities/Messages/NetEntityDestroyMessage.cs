@@ -1,6 +1,5 @@
 ﻿using Common.IO.Data;
-using Common.Logging;
-using Networking.Data;
+
 using Networking.Enums;
 
 namespace Networking.Entities.Messages
@@ -18,13 +17,13 @@ namespace Networking.Entities.Messages
 
         public void Deserialize(DataReader reader)
         {
-            Type = reader.Read<NetEntityMessageType>();
+            Type = (NetEntityMessageType)reader.ReadByte();
             Target = reader.ReadCompressedULong();
         }
 
         public void Serialize(DataWriter writer)
         {
-            writer.Write(Type);
+            writer.WriteByte((byte)Type);
             writer.WriteCompressedULong(Target);
         }
 

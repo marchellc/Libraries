@@ -1,12 +1,14 @@
 ﻿using Common.Utilities;
 
-using WatsonTcp;
+using Networking.Kcp;
+
+using System.Net;
 
 namespace Networking.Client
 {
     public static class NetClientConnector
     {
-        public static void ConnectIndefinitely(WatsonTcpClient client)
+        public static void ConnectIndefinitely(KcpClient client, IPEndPoint target)
         {
             CodeUtils.OnThread(() =>
             {
@@ -14,7 +16,7 @@ namespace Networking.Client
                 {
                     try
                     {
-                        client.Connect();
+                        client.Connect(target.Address.ToString(), (ushort)target.Port);
                         break;
                     }
                     catch { continue; }

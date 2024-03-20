@@ -3,7 +3,6 @@
 using Networking.Interfaces;
 
 using System.Collections.Generic;
-using System.Linq;
 
 namespace Networking.Data
 {
@@ -22,35 +21,15 @@ namespace Networking.Data
         }
 
         public void Send(params IData[] data)
-        {
-            if (!CanSend)
-                return;
-
-            var bytes = DataWriter.Write(writer =>
-            {
-                var pack = new NetPack(data);
-                writer.Write(pack);
-            });
-
-            client.Send(bytes);
-            sentBytesValue += (ulong)bytes.Length;
-        }
+            => Send((IEnumerable<IData>)data);
 
         public void Send(IEnumerable<IData> data)
         {
             if (!CanSend)
                 return;
 
-            var bytes = DataWriter.Write(writer =>
-            {
-                var batch = data.ToArray();
-                var pack = new NetPack(batch);
-
-                writer.Write(pack);
-            });
-
-            client.Send(bytes);
-            sentBytesValue += (ulong)bytes.Length;
+            foreach (var obj in data)
+                SendSingular(obj);
         }
 
         public void SendSingular(IData data)
@@ -61,20 +40,9 @@ namespace Networking.Data
             if (!CanSend)
                 return;
 
-            InternalSend(data);
-        }
-
-        private void InternalSend(IData data)
-        {
-            if (!CanSend)
-                return;
-
             var bytes = DataWriter.Write(writer =>
             {
-                var batch = new IData[] { data };
-                var pack = new NetPack(batch);
-
-                writer.Write(pack);
+                writer.WriteObject(data);
             });
 
             client.Send(bytes);

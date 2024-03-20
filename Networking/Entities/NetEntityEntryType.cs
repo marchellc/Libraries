@@ -2,10 +2,10 @@
 {
     public enum NetEntityEntryType : byte
     {
-        ServerCode,
-        ClientCode,
+        ServerCode = 0,
+        ClientCode = 2,
 
-        NetworkProperty,
-        NetworkEvent,
+        NetworkProperty = 4,
+        NetworkEvent = 8,
     }
 }

@@ -46,13 +46,14 @@ namespace Common.IO.Data
             {
                 foreach (var method in typeof(DataWriter).GetAllMethods())
                 {
+                    if (method.HasAttribute<DataLoaderIgnoreAttribute>())
+                        continue;
+
                     if (method.IsPublic && method.Name.StartsWith("Write") && method.Parameters().Length == 1 && !method.ContainsGenericParameters)
                     {
                         var type = method.Parameters()[0].ParameterType;
-
                         DataWriterUtils.Writers[type] = DataWriterUtils.WriterMethodToInvoke(method);
-
-                        Log.Verbose($"Cached default writer for '{type.FullName}': {method.ToName()}");
+                        Log.Info($"Cached default writer for '{type.FullName}': {method.ToName()}");
                     }
                 }
             }
@@ -60,8 +61,6 @@ namespace Common.IO.Data
             {
 
             }
-
-            Log.Info("Initialized.");
         }
 
         private static void SearchType(Type type)
@@ -74,6 +73,9 @@ namespace Common.IO.Data
                 foreach (var method in type.GetAllMethods())
                 {
                     if (!method.IsStatic)
+                        continue;
+
+                    if (method.HasAttribute<DataLoaderIgnoreAttribute>())
                         continue;
 
                     var methodParams = method.Parameters();
@@ -93,9 +95,9 @@ namespace Common.IO.Data
                             var invokeHandler = MethodInvoker.GetHandler(method);
                             DataWriterUtils.Writers[writerType] = (writer, value) => invokeHandler(null, writer, value);
                         }
-                        catch (Exception ex)
+                        catch 
                         {
-                            Log.Error($"Failed to create fast invoke handler for method '{method.ToName()}', falling back to reflection:\n{ex}");
+                            Log.Warn($"Failed to create fast invoke handler for method '{method.ToName()}', falling back to reflection");
                             DataWriterUtils.Writers[writerType] = (writer, value) => method.Invoke(writer, new object[] { value });
                         }
                     }
@@ -104,7 +106,7 @@ namespace Common.IO.Data
                         DataWriterUtils.Writers[writerType] = (writer, value) => method.Invoke(writer, new object[] { value });
                     }
 
-                    Log.Verbose($"Cached data writer: ({writerType.FullName}) {method.ToName()}");
+                    Log.Info($"Cached data writer: ({writerType.FullName}) {method.ToName()}");
                 }
             }
             catch 

@@ -219,9 +219,11 @@
     <Compile Include="Extensions\ThreadingExtensions.cs" />
     <Compile Include="IO\Data\AssemblyImageData.cs" />
     <Compile Include="IO\Data\DataCompression.cs" />
+    <Compile Include="IO\Data\DataLoaderIgnoreAttribute.cs" />
     <Compile Include="IO\Data\DataReader.cs" />
     <Compile Include="IO\Data\DataReaderAttribute.cs" />
     <Compile Include="IO\Data\DataReaderUtils.cs" />
+    <Compile Include="IO\Data\DataType.cs" />
     <Compile Include="IO\Data\DataWriter.cs" />
     <Compile Include="IO\Data\DataWriterAttribute.cs" />
     <Compile Include="IO\Data\DataWriterLoader.cs" />

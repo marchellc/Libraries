@@ -2,7 +2,7 @@
 {
     public enum NetEntityMessageType : byte
     {
-        Request,
-        Confirmation
+        Request = 0,
+        Confirmation = 2
     }
 }

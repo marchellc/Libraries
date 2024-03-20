@@ -1,12 +1,10 @@
-﻿using System;
-
-namespace Networking.Interfaces
+﻿namespace Networking.Interfaces
 {
     public interface IPeer : IClient
     {
         IServer Server { get; }
 
-        Guid Id { get; }
+        int Id { get; }
 
         void Process(byte[] data);
     }

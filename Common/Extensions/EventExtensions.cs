@@ -162,10 +162,7 @@ namespace Common.Extensions
             var evDelegate = evDelegateField.GetValueFast<MulticastDelegate>(instance);
 
             if (evDelegate is null)
-            {
-                Log.Warn($"Cannot raise event '{ev.ToName()}', it's delegate is null (perhaps it doesn't have any listeners).");
                 return;
-            }
 
             try
             {

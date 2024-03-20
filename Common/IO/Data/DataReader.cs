@@ -2,6 +2,7 @@
 using Common.Pooling.Pools;
 using Common.Utilities;
 using Common.Extensions;
+using Common.Logging;
 
 using System;
 using System.IO;
@@ -14,6 +15,8 @@ namespace Common.IO.Data
 {
     public class DataReader : PoolableItem
     {
+        public static readonly LogOutput Log = new LogOutput("Data Reader").Setup();
+
         public struct DataBuffer
         {
             public byte[] Data;
@@ -163,7 +166,9 @@ namespace Common.IO.Data
         }
 
         public void Set(byte[] data)
-            => buffer = new DataBuffer(data);
+        {
+            buffer = new DataBuffer(data);
+        }
 
         public override void OnPooled()
         {
@@ -174,6 +179,7 @@ namespace Common.IO.Data
         public byte ReadByte()
             => buffer.Move(1)[0];
 
+        [DataLoaderIgnore]
         public byte[] ReadBytes(int count)
             => buffer.Move(count);
 
@@ -201,12 +207,14 @@ namespace Common.IO.Data
         public long ReadLong()
             => buffer.Move(8).ToLong();
 
+        [DataLoaderIgnore]
         public long ReadCompressedLong()
             => DataCompression.DecompressLong(this);
 
         public ulong ReadULong()
             => buffer.Move(8).ToULong();
 
+        [DataLoaderIgnore]
         public ulong ReadCompressedULong()
             => DataCompression.DecompressULong(this);
 
@@ -279,12 +287,12 @@ namespace Common.IO.Data
 
         public Type ReadType()
         {
-            var typeCode = ReadUShort();
+            var typeData = new DataType(this);
 
-            if (!TypeSearch.TryFind(typeCode, out var type))
-                throw new TypeLoadException($"Failed to find type of ID '{typeCode}'");
+            if (typeData.Type is null)
+                throw new TypeLoadException($"Failed to read type - unknown error.");
 
-            return type;
+            return typeData.Type;
         }
 
         public Assembly ReadAssemblyImage()
@@ -339,7 +347,6 @@ namespace Common.IO.Data
             var reader = PoolablePool<DataReader>.Shared.Rent();
 
             reader.Set(data);
-
             return reader;
         }
 
@@ -353,67 +360,42 @@ namespace Common.IO.Data
                 buffer.Add(data[i]);
 
             writer.Buffer = buffer;
-
             return writer;
         }
 
         public object ReadObject()
         {
-            var isNull = ReadBool();
-
-            if (isNull)
-                return null;
-
             var objectType = ReadType();
 
             if (objectType.IsEnum)
-                return DataReaderUtils.ReadEnum(this);
+                return DataReaderUtils.ReadEnum(this, objectType);
 
             if (typeof(IData).IsAssignableFrom(objectType))
             {
                 var data = objectType.Construct<IData>();
 
                 data.Deserialize(this);
-
                 return data;
             }
 
             var reader = DataReaderUtils.GetReader(objectType);
-
             return reader(this);
         }
 
+        [DataLoaderIgnore]
         public T ReadAnonymous<T>(Type type) where T : IData
         {
             var data = type.Construct<T>();
 
             data.Deserialize(this);
-
             return data;
         }
 
+        [DataLoaderIgnore]
         public T Read<T>()
-        {
-            var isNull = ReadBool();
+            => (T)ReadObject();
 
-            if (isNull)
-                return default;
-
-            if (typeof(T).IsEnum)
-                return (T)(object)DataReaderUtils.ReadEnum(this);
-
-            if (typeof(IData).IsAssignableFrom(typeof(T)))
-            {
-                var data = typeof(T).Construct<IData>();
-
-                data.Deserialize(this);
-                return (T)data;
-            }
-
-            var reader = DataReaderUtils.GetReader(typeof(T));
-            return (T)reader(this);
-        }
-
+        [DataLoaderIgnore]
         public T? ReadNullable<T>() where T : struct
         {
             var isNull = ReadBool();
@@ -424,9 +406,11 @@ namespace Common.IO.Data
             return Read<T>();
         }
 
+        [DataLoaderIgnore]
         public void ReadRef<T>(ref T value)
             => value = Read<T>();
 
+        [DataLoaderIgnore]
         public T[] ReadArray<T>()
         {
             var size = ReadInt();
@@ -441,6 +425,7 @@ namespace Common.IO.Data
             return array;
         }
 
+        [DataLoaderIgnore]
         public T[] ReadArrayCustom<T>(Func<T> reader)
         {
             var size = ReadInt();
@@ -455,6 +440,7 @@ namespace Common.IO.Data
             return array;
         }
 
+        [DataLoaderIgnore]
         public void ReadIntoArray<T>(T[] destination, int start = 0)
         {
             var size = ReadInt();
@@ -469,6 +455,7 @@ namespace Common.IO.Data
                 destination[i + start] = Read<T>();
         }
 
+        [DataLoaderIgnore]
         public void ReadIntoArrayCustom<T>(T[] destination, int start, Func<T> reader)
         {
             var size = ReadInt();
@@ -483,6 +470,7 @@ namespace Common.IO.Data
                 destination[i + start] = reader();
         }
 
+        [DataLoaderIgnore]
         public List<T> ReadList<T>()
         {
             var size = ReadInt();
@@ -497,6 +485,7 @@ namespace Common.IO.Data
             return list;
         }
 
+        [DataLoaderIgnore]
         public void ReadIntoList<T>(ICollection<T> list)
         {
             var size = ReadInt();
@@ -508,6 +497,7 @@ namespace Common.IO.Data
                 list.Add(Read<T>());
         }
 
+        [DataLoaderIgnore]
         public HashSet<T> ReadHashSet<T>()
         {
             var size = ReadInt();
@@ -522,6 +512,7 @@ namespace Common.IO.Data
             return set;
         }
 
+        [DataLoaderIgnore]
         public Dictionary<TKey, TValue> ReadDictionary<TKey, TValue>()
         {
             var size = ReadInt();
@@ -536,6 +527,7 @@ namespace Common.IO.Data
             return dict;
         }
 
+        [DataLoaderIgnore]
         public void ReadIntoDictionary<TKey, TValue>(IDictionary<TKey, TValue> dict)
         {
             var size = ReadInt();
@@ -547,6 +539,7 @@ namespace Common.IO.Data
                 dict[Read<TKey>()] = Read<TValue>();
         }
 
+        [DataLoaderIgnore]
         public void ReadProperties<T>(T value)
         {
             if (value is null)
@@ -568,6 +561,7 @@ namespace Common.IO.Data
             }
         }
 
+        [DataLoaderIgnore]
         public void Return()
             => PoolablePool<DataReader>.Shared.Return(this);
 
@@ -581,7 +575,7 @@ namespace Common.IO.Data
         public static void Read(byte[] data, Action<DataReader> reader)
         {
             var read = Get(data);
-            reader.Call(read);
+            reader.Call(read, null, Log.Error);
             read.Return();
         }
 

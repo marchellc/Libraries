@@ -2,7 +2,6 @@
 using Common.IO.Collections;
 
 using System;
-using System.Collections.Generic;
 
 namespace Common.Utilities
 {
@@ -13,40 +12,19 @@ namespace Common.Utilities
 
         public static event Action<Type> OnTypeDiscovered;
 
-        public static IEnumerable<Type> GetTypes()
-        {
-            var assemblies = AppDomain.CurrentDomain.GetAssemblies();
-            var types = new List<Type>();
-
-            foreach (var assembly in assemblies)
-            {
-                try
-                {
-                    foreach (var type in assembly.GetTypes())
-                    {
-                        try
-                        {
-                            types.Add(type);
-                        }
-                        catch { }
-                    }
-                }
-                catch { }
-            }
-
-            return types;
-        }
-
         public static bool TryFind(int typeId, out Type type)
         {
             if (longDiscovery.TryGetValue(typeId, out type))
                 return true;
 
-            var types = GetTypes();
+            var types = ModuleInitializer.SafeQueryTypes();
 
             foreach (var searchType in types)
             {
-                if (searchType.FullName.GetShortCode() == typeId)
+                if (searchType.FullName.StartsWith("Microsoft") || searchType.InheritsType(typeof(Attribute)))
+                    continue;
+
+                if (searchType.GetLongCode() == typeId)
                 {
                     longDiscovery[typeId] = searchType;
                     type = searchType;
@@ -64,11 +42,14 @@ namespace Common.Utilities
             if (shortDiscovery.TryGetValue(typeId, out type))
                 return true;
 
-            var types = GetTypes();
+            var types = ModuleInitializer.SafeQueryTypes();
 
             foreach (var searchType in types)
             {
-                if (searchType.FullName.GetShortCode() == typeId)
+                if (searchType.FullName.StartsWith("Microsoft") || searchType.InheritsType(typeof(Attribute)))
+                    continue;
+
+                if (searchType.GetShortCode() == typeId)
                 {
                     shortDiscovery[typeId] = searchType;
                     type = searchType;

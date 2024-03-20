@@ -1,8 +1,8 @@
-﻿using Common.Extensions;
+﻿using Common;
+using Common.Extensions;
 using Common.IO.Collections;
 using Common.Logging;
 using Common.Pooling.Pools;
-using Common.Utilities;
 
 using Networking.Entities.Attributes;
 
@@ -19,7 +19,7 @@ namespace Networking.Entities
         {
             registry.Clear();
 
-            var types = TypeSearch.GetTypes();
+            var types = ModuleInitializer.SafeQueryTypes();
 
             foreach (var type in types)
             {

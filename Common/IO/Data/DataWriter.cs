@@ -1,4 +1,5 @@
 ﻿using Common.Extensions;
+using Common.Logging;
 using Common.Pooling;
 using Common.Pooling.Pools;
 
@@ -12,6 +13,8 @@ namespace Common.IO.Data
 {
     public class DataWriter : PoolableItem
     {
+        public static readonly LogOutput Log = new LogOutput("Data Writer").Setup();
+
         public struct DataBuffer
         {
             public byte[] Data;
@@ -107,7 +110,9 @@ namespace Common.IO.Data
 
         public override void OnPooled()
         {
-            buffer.Finish();
+            if (!buffer.IsFinished)
+                buffer.Finish();
+
             buffer.Data = null;
             buffer = default;
         }
@@ -121,72 +126,75 @@ namespace Common.IO.Data
         public void WriteByte(byte b)
             => buffer.Add(b);
 
+        [DataLoaderIgnore]
         public void WriteBytes(IEnumerable<byte> bytes)
         {
             WriteInt(bytes.Count());
 
             foreach (var b in bytes)
-                buffer.Add(b);
+                WriteByte(b);
         }
 
         public void WriteBool(bool b)
-            => buffer.Add((byte)(b ? 1 : 0));
+            => WriteByte((byte)(b ? 1 : 0));
 
         public void WriteShort(short s)
         {
-            buffer.Add((byte)s);
-            buffer.Add((byte)(s >> 8));
+            WriteByte((byte)s);
+            WriteByte((byte)(s >> 8));
         }
 
         public void WriteUShort(ushort us)
         {
-            buffer.Add((byte)us);
-            buffer.Add((byte)(us >> 8));
+            WriteByte((byte)us);
+            WriteByte((byte)(us >> 8));
         }
 
         public void WriteInt(int i)
         {
-            buffer.Add((byte)i);
-            buffer.Add((byte)(i >> 8));
-            buffer.Add((byte)(i >> 16));
-            buffer.Add((byte)(i >> 24));
+            WriteByte((byte)i);
+            WriteByte((byte)(i >> 8));
+            WriteByte((byte)(i >> 16));
+            WriteByte((byte)(i >> 24));
         }
 
         public void WriteUInt(uint ui)
         {
-            buffer.Add((byte)ui);
-            buffer.Add((byte)(ui >> 8));
-            buffer.Add((byte)(ui >> 16));
-            buffer.Add((byte)(ui >> 24));
+            WriteByte((byte)ui);
+            WriteByte((byte)(ui >> 8));
+            WriteByte((byte)(ui >> 16));
+            WriteByte((byte)(ui >> 24));
         }
 
         public void WriteLong(long l)
         {
-            buffer.Add((byte)l);
-            buffer.Add((byte)(l >> 8));
-            buffer.Add((byte)(l >> 16));
-            buffer.Add((byte)(l >> 24));
-            buffer.Add((byte)(l >> 32));
-            buffer.Add((byte)(l >> 40));
-            buffer.Add((byte)(l >> 48));
-            buffer.Add((byte)(l >> 56));
+            WriteByte((byte)l);
+            WriteByte((byte)(l >> 8));
+            WriteByte((byte)(l >> 16));
+            WriteByte((byte)(l >> 24));
+            WriteByte((byte)(l >> 32));
+            WriteByte((byte)(l >> 40));
+            WriteByte((byte)(l >> 48));
+            WriteByte((byte)(l >> 56));
         }
 
+        [DataLoaderIgnore]
         public void WriteCompressedLong(long l)
             => DataCompression.CompressLong(this, l);
 
         public void WriteULong(ulong ul)
         {
-            buffer.Add((byte)ul);
-            buffer.Add((byte)(ul >> 8));
-            buffer.Add((byte)(ul >> 16));
-            buffer.Add((byte)(ul >> 24));
-            buffer.Add((byte)(ul >> 32));
-            buffer.Add((byte)(ul >> 40));
-            buffer.Add((byte)(ul >> 48));
-            buffer.Add((byte)(ul >> 56));
+            WriteByte((byte)ul);
+            WriteByte((byte)(ul >> 8));
+            WriteByte((byte)(ul >> 16));
+            WriteByte((byte)(ul >> 24));
+            WriteByte((byte)(ul >> 32));
+            WriteByte((byte)(ul >> 40));
+            WriteByte((byte)(ul >> 48));
+            WriteByte((byte)(ul >> 56));
         }
 
+        [DataLoaderIgnore]
         public void WriteCompressedULong(ulong ul)
             => DataCompression.CompressULong(this, ul);
 
@@ -240,12 +248,14 @@ namespace Common.IO.Data
             WriteLong(ticks);
         }
 
+        [DataLoaderIgnore]
         public void WriteFile(string filePath)
         {
             var data = new FileData(filePath);
             Write(data);
         }
 
+        [DataLoaderIgnore]
         public void WriteFile(string name, string extension, byte[] bytes)
         {
             var data = new FileData(name, extension, bytes);
@@ -256,8 +266,8 @@ namespace Common.IO.Data
         {
             WriteInt(v.Major);
             WriteInt(v.Minor);
-            WriteInt(v.Build);
-            WriteInt(v.Revision);
+            WriteInt(v.Build < 0 ? 0 : v.Build);
+            WriteInt(v.Revision < 0 ? 0 : v.Build);
         }
 
         public void WriteIpAddress(IPAddress address)
@@ -273,10 +283,7 @@ namespace Common.IO.Data
         }
 
         public void WriteType(Type type)
-        {
-            var typeCode = type.GetShortCode();
-            WriteUShort(typeCode);
-        }
+            => new DataType(type).Write(this);
 
         public void WriteMember(MemberInfo member)
         {
@@ -292,6 +299,7 @@ namespace Common.IO.Data
             Write(assemblyImage);
         }
 
+        [DataLoaderIgnore]
         public void WriteAssemblyImage(byte[] image)
         {
             var assemblyImage = new AssemblyImageData(image);
@@ -313,12 +321,7 @@ namespace Common.IO.Data
         public void WriteObject(object o)
         {
             if (o is null)
-            {
-                WriteBool(true);
-                return;
-            }
-
-            WriteBool(false);
+                throw new ArgumentNullException(nameof(o));
 
             var type = o.GetType();
 
@@ -337,10 +340,10 @@ namespace Common.IO.Data
             }
 
             var writer = DataWriterUtils.GetWriter(type);
-
             writer(this, o);
         }
 
+        [DataLoaderIgnore]
         public void WriteAnonymous<T>(T data) where T : IData
         {
             if (data is null)
@@ -349,31 +352,11 @@ namespace Common.IO.Data
             data.Serialize(this);
         }
 
+        [DataLoaderIgnore]
         public void Write<T>(T value)
-        {
-            if (value is null)
-            {
-                WriteBool(true);
-                return;
-            }
+            => WriteObject(value);
 
-            WriteBool(false);
-
-            if (value is Enum en)
-            {
-                DataWriterUtils.WriteEnum(this, en);
-                return;
-            }
-
-            if (value is IData data)
-                data.Serialize(this);
-            else
-            {
-                var writer = DataWriterUtils.GetWriter(typeof(T));
-                writer(this, value);
-            }
-        }
-
+        [DataLoaderIgnore]
         public void WriteNullable<T>(T? value) where T : struct
         {
             if (!value.HasValue)
@@ -382,9 +365,11 @@ namespace Common.IO.Data
                 return;
             }
 
+            WriteBool(false);
             Write(value.Value);
         }
 
+        [DataLoaderIgnore]
         public void WriteEnumerable<T>(IEnumerable<T> values)
         {
             WriteInt(values.Count());
@@ -393,6 +378,7 @@ namespace Common.IO.Data
                 Write(item);
         }
 
+        [DataLoaderIgnore]
         public void WriteEnumerableCustom<T>(IEnumerable<T> values, Action<T> writer)
         {
             WriteInt(values.Count());
@@ -401,6 +387,7 @@ namespace Common.IO.Data
                 writer(item);
         }
 
+        [DataLoaderIgnore]
         public void WriteDictionary<TKey, TValue>(IDictionary<TKey, TValue> dict)
         {
             WriteInt(dict.Count);
@@ -412,6 +399,7 @@ namespace Common.IO.Data
             }
         }
 
+        [DataLoaderIgnore]
         public void WriteProperties<T>(T value, params string[] props)
         {
             WriteInt(props.Length);
@@ -430,6 +418,7 @@ namespace Common.IO.Data
             }
         }
 
+        [DataLoaderIgnore]
         public void Return()
             => PoolablePool<DataWriter>.Shared.Return(this);
 
@@ -439,7 +428,7 @@ namespace Common.IO.Data
         public static byte[] Write(Action<DataWriter> writer)
         {
             var pooled = Get();
-            writer.Call(pooled);
+            writer.Call(pooled, null, Log.Error);
             var data = pooled.Data;
             pooled.Return();
             return data;

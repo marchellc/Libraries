@@ -1,5 +1,6 @@
 ﻿using Common.Extensions;
 using Common.IO.Collections;
+using Common.Logging;
 
 using HarmonyLib;
 
@@ -12,6 +13,7 @@ namespace Common.IO.Data
     public static class DataReaderUtils
     {
         public static readonly LockedDictionary<Type, Func<DataReader, object>> Readers = new LockedDictionary<Type, Func<DataReader, object>>();
+        public static readonly LogOutput Log = new LogOutput("Data Reader Utils").Setup();
 
         public static Func<DataReader, object> GetReader(Type type)
         {
@@ -54,20 +56,21 @@ namespace Common.IO.Data
             }
 
             if (method != null)
+            {
+                DataReaderLoader.Log.Info($"Cached a new reader for type '{type.FullName}': {method.ToName()}");
                 return Readers[type] = ReaderMethodToDelegate(method);
+            }
 
             throw new InvalidOperationException($"No readers assigned for type '{type.FullName}'");
         }
 
-        public static Enum ReadEnum(this DataReader reader)
+        public static Enum ReadEnum(this DataReader reader, Type type)
         {
-            var code = (TypeCode)reader.ReadByte();
-            var type = code.ToType();
-            var enType = reader.ReadType();
-            var enReader = GetReader(type);
-            var enNumValue = enReader(reader);
+            var numType = Enum.GetUnderlyingType(type);
+            var numReader = GetReader(numType);
+            var numValue = numReader(reader);
 
-            return (Enum)Enum.ToObject(enType, enNumValue);
+            return (Enum)Enum.ToObject(type, numValue);
         }
 
         public static Func<DataReader, object> ReaderMethodToDelegate(MethodInfo method)

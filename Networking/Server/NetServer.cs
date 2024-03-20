@@ -1,27 +1,27 @@
 ﻿using Common.Extensions;
 using Common.IO.Collections;
 using Common.Logging;
+using Common.Utilities;
 
 using Networking.Enums;
 using Networking.Interfaces;
+using Networking.Kcp;
 using Networking.Peer;
-using Networking.Utilities;
-
-using WatsonTcp;
 
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
-using System.Threading.Tasks;
 
 namespace Networking.Server
 {
     public class NetServer : IServer
     {
-        private WatsonTcpServer server;
+        private static readonly KcpConfig config;
 
-        private LockedDictionary<Guid, NetPeer> peers;
+        private KcpServer server;
+
+        private LockedDictionary<int, NetPeer> peers;
         private LockedList<Type> preloads;
 
         public readonly LogOutput Log;
@@ -33,8 +33,8 @@ namespace Networking.Server
 
         public ClientType Type => ClientType.Server;
 
-        public bool IsRunning => server != null && server.IsListening;
-        public bool IsConnected => server != null && server.IsListening && Peers.Count > 0;
+        public bool IsRunning => server != null;
+        public bool IsConnected => server != null && server.connections.Count > 0;
 
         public IReadOnlyCollection<IPeer> Peers => peers.Values.ToList();
 
@@ -49,22 +49,41 @@ namespace Networking.Server
         public event Action<NetPeer> OnConnected;
         public event Action<NetPeer> OnDisconnected;
 
-        public static NetServer Instance { get; } = new NetServer();
+        public static NetServer Instance { get; }
+
+        static NetServer()
+        {
+            config = new KcpConfig(
+                        NoDelay: true,
+                        DualMode: false,
+                        CongestionWindow: false,
+
+                        Interval: 10,
+                        Timeout: 5000,
+
+                        SendWindowSize: KcpSocket.WND_SND * 1000,
+                        ReceiveWindowSize: KcpSocket.WND_RCV * 1000,
+                        MaxRetransmits: KcpSocket.DEADLINK * 2);
+
+            Instance = new NetServer();
+        }
 
         public NetServer()
         {
-            peers = new LockedDictionary<Guid, NetPeer>();
+            peers = new LockedDictionary<int, NetPeer>();
             preloads = new LockedList<Type>();
 
             Log = new LogOutput("NetServer");
             Log.Setup();
+
+            CodeUtils.WhileTrue(() => true, Tick, (int)config.Interval);
         }
 
         public T Get<T>() where T : IComponent
             => throw new InvalidOperationException($"Cannot get component instances on the server.");
 
         public void Send(byte[] data)
-            => throw new InvalidOperationException($"You need to use the Send(string, byte[]) overload for the server!");
+            => throw new InvalidOperationException($"You need to use the Send(int, byte[]) overload for the server!");
 
         public void Add<T>() where T : IComponent
         {
@@ -86,7 +105,7 @@ namespace Networking.Server
             return false;
         }
 
-        public void Send(Guid id, byte[] data)
+        public void Send(int id, byte[] data)
         {
             if (!IsRunning)
             {
@@ -96,11 +115,12 @@ namespace Networking.Server
 
             try
             {
-                Task.Run(async () => await server.SendAsync(id, data));
+                Log.Verbose($"Sending {data.Length} bytes to clientId={id}");
+                server.Send(id, data.ToSegment(), KcpChannel.Reliable);
             }
             catch (Exception ex)
             {
-                Log.Error($"The TCP server failed to send data to clientId={id}!\n{ex} ");
+                Log.Error($"The KCP server failed to send data to clientId={id}!\n{ex} ");
             }
         }
 
@@ -116,26 +136,22 @@ namespace Networking.Server
 
             try
             {
-                server = new WatsonTcpServer(null, Port);
+                server = new KcpServer(
+                    OnClientConnected,
+                    OnClientData,
+                    OnClientDisconnected,
+                    OnClientError,
 
-                server.Settings.NoDelay = true;
+                    config);
 
-                server.Keepalive.EnableTcpKeepAlives = true;
-                server.Keepalive.TcpKeepAliveInterval = 1;
-                server.Keepalive.TcpKeepAliveTime = 1;
-
-                server.Events.MessageReceived += OnClientData;
-                server.Events.ClientConnected += OnClientConnected;
-                server.Events.ClientDisconnected += OnClientDisconnected;
-
-                server.Start();
+                server.Start((ushort)LocalAddress.Port);
 
                 Log.Name = $"NetServer ({Port})";
                 Log.Info($"Server socket started! Listening on port {Port}.");
             }
             catch (Exception ex)
             {
-                Log.Error($"Failed to start a new Telepathy server on '{LocalAddress}'!\n{ex}");
+                Log.Error($"Failed to start a new KCP server on '{LocalAddress}'!\n{ex}");
             }
         }
 
@@ -147,10 +163,6 @@ namespace Networking.Server
             try
             {
                 Log.Info($"Stopping the server socket on port {Port} ..");
-
-                server.Events.MessageReceived -= OnClientData;
-                server.Events.ClientConnected -= OnClientConnected;
-                server.Events.ClientDisconnected -= OnClientDisconnected;
 
                 foreach (var peer in peers)
                 {
@@ -167,7 +179,6 @@ namespace Networking.Server
                 peers.Clear();
 
                 server.Stop();
-                server.Dispose();
                 server = null;
 
                 preloads?.Clear();
@@ -181,42 +192,42 @@ namespace Networking.Server
             }
             catch (Exception ex)
             {
-                Log.Error($"Failed to stop the currently active Telepathy server!\n{ex}");
+                Log.Error($"Failed to stop the currently active KCP server!\n{ex}");
             }
         }
 
-        private void OnClientConnected(object _, ConnectionEventArgs ev)
+        private void OnClientConnected(int clientId)
         {
-            if (peers.ContainsKey(ev.Client.Guid))
+            if (peers.ContainsKey(clientId))
             {
-                Log.Warn($"Received connect for an already connected clientId={ev.Client.Guid}");
+                Log.Warn($"Received connect for an already connected clientId={clientId}");
                 return;
             }
 
             try
             {
-                var address = IpParser.ParseEndPoint(ev.Client.IpPort);
-                var peer = new NetPeer(this, ev.Client.Guid, address, LocalAddress, preloads);
+                var address = server.GetClientEndPoint(clientId);
+                var peer = new NetPeer(this, clientId, address, LocalAddress, preloads);
 
                 Log.Info($"Accepted an incoming connection from address={address}");
 
                 peer.Start();
 
-                peers[ev.Client.Guid] = peer;
+                peers[clientId] = peer;
 
                 OnConnected.Call(peer);
             }
             catch (Exception ex)
             {
-                Log.Error($"Peer '{ev.Client.Guid}' failed to process connection!\n{ex}");
+                Log.Error($"Peer '{clientId}' failed to process connection!\n{ex}");
             }
         }
 
-        private void OnClientDisconnected(object _, DisconnectionEventArgs ev)
+        private void OnClientDisconnected(int clientId)
         {
-            if (!peers.TryGetValue(ev.Client.Guid, out var peer))
+            if (!peers.TryGetValue(clientId, out var peer))
             {
-                Log.Warn($"Received disconnect for an unknown clientId={ev.Client.IpPort}");
+                Log.Warn($"Received disconnect for an unknown clientId={clientId}");
                 return;
             }
 
@@ -228,31 +239,56 @@ namespace Networking.Server
             }
             catch (Exception ex)
             {
-                Log.Error($"Peer '{peer.Id}' failed to process disconnect!\n{ex}");
+                Log.Error($"Peer '{clientId}' failed to process disconnect!\n{ex}");
             }
 
-            if (!peers.Remove(ev.Client.Guid))
-                Log.Warn($"Failed to remove peer clientId={ev.Client.Guid} from the peering dictionary!");
+            if (!peers.Remove(clientId))
+                Log.Warn($"Failed to remove peer clientId={clientId} from the peering dictionary!");
 
-            Log.Info($"Client clientId={ev.Client.Guid} has disconnected from address={peer.RemoteAddress}");
+            Log.Info($"Client clientId={clientId} has disconnected from address={peer.RemoteAddress}");
         }
 
-        private void OnClientData(object _, MessageReceivedEventArgs ev)
+        private void OnClientData(int clientId, ArraySegment<byte> data, KcpChannel channel)
         {
-            if (!peers.TryGetValue(ev.Client.Guid, out var peer))
+            if (!peers.TryGetValue(clientId, out var peer))
             {
-                Log.Warn($"Received data for an unknown clientId={ev.Client.Guid}");
+                Log.Warn($"Received data for an unknown clientId={clientId}");
                 return;
             }
 
+            if (channel != KcpChannel.Reliable)
+            {
+                Log.Warn($"Received {data.Count} bytes for clientId={clientId} on the unreliable channel.");
+                return;
+            }
+
+            Log.Verbose($"Received {data.Count} bytes from clientId={clientId} @ {channel}");
+
             try
             {
-                peer.Process(ev.Data);
+                peer.Process(data.ToArray());
             }
             catch (Exception ex)
             {
                 Log.Error($"Peer '{peer.Id}' failed to process incoming data!\n{ex}");
             }
+        }
+
+        private void OnClientError(int clientId, KcpErrorCode errorCode, string msg)
+        {
+            Log.Warn($"Caught an error in clientId={clientId} ({errorCode}): {msg ?? "no message"}");
+        }
+
+        private void Tick()
+        {
+            if (server is null)
+                return;
+
+            try
+            {
+                server.Tick();
+            }
+            catch { }
         }
     }
 }

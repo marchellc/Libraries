@@ -2,7 +2,7 @@
 {
     public enum NetEntityRequestType : byte
     {
-        LocalRequest,
-        RemoteRequest
+        LocalRequest = 0,
+        RemoteRequest = 2
     }
 }

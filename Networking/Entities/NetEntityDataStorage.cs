@@ -2,6 +2,7 @@
 using Common.IO.Collections;
 using Common.Logging;
 using Common.Utilities;
+
 using Networking.Entities.Messages;
 
 using System;
@@ -36,9 +37,14 @@ namespace Networking.Entities
                 if (netEntityData.Entries[i].Type != NetEntityEntryType.NetworkProperty)
                     continue;
 
-                storedValues[netEntityData.Entries[i].ShortCode] = null;
-                hooks[netEntityData.Entries[i].ShortCode] = new List<PropertyHook>();
+                var valueField = entity.GetType().Field($"{netEntityData.Entries[i].Name}DefValue");
 
+                if (valueField != null)
+                    storedValues[netEntityData.Entries[i].ShortCode] = valueField.GetValueFast<object>(entity);
+                else
+                    storedValues[netEntityData.Entries[i].ShortCode] = default;
+
+                hooks[netEntityData.Entries[i].ShortCode] = new List<PropertyHook>();
                 Log.Verbose($"Pre-saved value '{netEntityData.Entries[i].ShortCode}'");
             }
         }

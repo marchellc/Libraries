@@ -159,9 +159,6 @@
     <Reference Include="System.Data" />
     <Reference Include="System.Net.Http" />
     <Reference Include="System.Xml" />
-    <Reference Include="WatsonTcp, Version=6.0.5.0, Culture=neutral, PublicKeyToken=c61f5f04303a13b3, processorArchitecture=MSIL">
-      <HintPath>..\packages\WatsonTcp.6.0.5\lib\net48\WatsonTcp.dll</HintPath>
-    </Reference>
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Client\NetClientConnector.cs" />
@@ -169,7 +166,6 @@
     <Compile Include="Data\BasicListener.cs" />
     <Compile Include="Data\DelegateListener.cs" />
     <Compile Include="Data\NetListener.cs" />
-    <Compile Include="Data\NetPack.cs" />
     <Compile Include="Data\NetSender.cs" />
     <Compile Include="Entities\Attributes\NetEntityRemoteTypeAttribute.cs" />
     <Compile Include="Entities\Messages\NetEntityDataMessage.cs" />
@@ -204,6 +200,25 @@
     <Compile Include="Interfaces\ISender.cs" />
     <Compile Include="Interfaces\IServer.cs" />
     <Compile Include="Interfaces\ITarget.cs" />
+    <Compile Include="Kcp\KcpAck.cs" />
+    <Compile Include="Kcp\KcpChannel.cs" />
+    <Compile Include="Kcp\KcpClient.cs" />
+    <Compile Include="Kcp\KcpCommon.cs" />
+    <Compile Include="Kcp\KcpConfig.cs" />
+    <Compile Include="Kcp\KcpConnection.cs" />
+    <Compile Include="Kcp\KcpErrorCode.cs" />
+    <Compile Include="Kcp\KcpExtensions.cs" />
+    <Compile Include="Kcp\KcpHeader.cs" />
+    <Compile Include="Kcp\KcpLog.cs" />
+    <Compile Include="Kcp\KcpPeer.cs" />
+    <Compile Include="Kcp\KcpPool.cs" />
+    <Compile Include="Kcp\KcpReliableHeader.cs" />
+    <Compile Include="Kcp\KcpSegment.cs" />
+    <Compile Include="Kcp\KcpServer.cs" />
+    <Compile Include="Kcp\KcpSocket.cs" />
+    <Compile Include="Kcp\KcpState.cs" />
+    <Compile Include="Kcp\KcpUnreliableHeader.cs" />
+    <Compile Include="Kcp\KcpUtils.cs" />
     <Compile Include="NetComponent.cs" />
     <Compile Include="Peer\NetPeer.cs" />
     <Compile Include="Pinging\PingResult.cs" />
