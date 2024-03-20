@@ -1,4 +1,5 @@
 ﻿using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
 
 namespace Common.Utilities
 {
@@ -12,9 +13,10 @@ namespace Common.Utilities
             {
                 ConstructorHandling = ConstructorHandling.AllowNonPublicDefaultConstructor,
                 Formatting = Formatting.Indented,
-
                 CheckAdditionalContent = true
             };
+
+            JsonSettings.Converters.Add(new StringEnumConverter(false));
         }
 
         public static T JsonDeserialize<T>(this string json)

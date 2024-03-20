@@ -24,7 +24,7 @@ namespace Networking.Http
             EnabledLevels = new List<LogLevel>(Enum.GetValues(typeof(LogLevel)).Cast<LogLevel>());
         }
 
-        public IDisposable BeginScope<TState>(TState state) where TState : notnull 
+        public IDisposable BeginScope<TState>(TState state) where TState : notnull
             => this;
 
         public ILogger CreateLogger(string categoryName)

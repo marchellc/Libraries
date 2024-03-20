@@ -13,6 +13,9 @@ namespace Common.Extensions
 
         public static int ToLongCode(this MemberInfo member)
         {
+            if (member is Type type)
+                return type.GetLongCode();
+
             if (member.DeclaringType != null)
                 return $"{member.DeclaringType.AssemblyQualifiedName}^{member.Name}".GetIntegerCode();
 
@@ -21,8 +24,11 @@ namespace Common.Extensions
 
         public static ushort ToShortCode(this MemberInfo member)
         {
+            if (member is Type type)
+                return type.GetShortCode();
+
             if (member.DeclaringType != null)
-                return $"{member.DeclaringType.AssemblyQualifiedName}^{member.Name}".GetShortCode();
+                return $"{member.DeclaringType.FullName}^{member.Name}".GetShortCode();
 
             return member.Name.GetShortCode();
         }

@@ -4,6 +4,7 @@ using Common.IO.Collections;
 using HarmonyLib;
 
 using System;
+using System.Collections.Generic;
 using System.Reflection;
 
 namespace Common.IO.Data
@@ -17,6 +18,44 @@ namespace Common.IO.Data
             if (Readers.TryGetValue(type, out var reader))
                 return reader;
 
+            MethodInfo method = null;
+
+            if (type.IsArray)
+            {
+                var elementType = type.GetElementType();
+                method = typeof(DataReader).Method("ReadArray").MakeGenericMethod(elementType);
+            }
+            else if (type.GetTypeInfo().IsGenericType)
+            {
+                if (type.GetGenericTypeDefinition() == typeof(List<>))
+                {
+                    var elementType = type.GetFirstGenericType();
+                    method = typeof(DataReader).Method("ReadList").MakeGenericMethod(elementType);
+                }
+                else if (type.GetGenericTypeDefinition() == typeof(HashSet<>))
+                {
+                    var elementType = type.GetFirstGenericType();
+                    method = typeof(DataReader).Method("ReadHashSet").MakeGenericMethod(elementType);
+                }
+                else if (type.GetGenericTypeDefinition() == typeof(Dictionary<,>))
+                {
+                    var args = type.GetGenericArguments();
+
+                    var keyType = args[0];
+                    var elementType = args[1];
+
+                    method = typeof(DataReader).Method("ReadDictionary").MakeGenericMethod(keyType, elementType);
+                }
+            }
+            else if (Nullable.GetUnderlyingType(type) != null)
+            {
+                var valueType = Nullable.GetUnderlyingType(type);
+                method = typeof(DataReader).Method("ReadNullable").MakeGenericMethod(valueType);
+            }
+
+            if (method != null)
+                return Readers[type] = ReaderMethodToDelegate(method);
+
             throw new InvalidOperationException($"No readers assigned for type '{type.FullName}'");
         }
 
@@ -28,13 +67,23 @@ namespace Common.IO.Data
             var enReader = GetReader(type);
             var enNumValue = enReader(reader);
 
-            return (Enum)Convert.ChangeType(enNumValue, enType);
+            return (Enum)Enum.ToObject(enType, enNumValue);
         }
 
         public static Func<DataReader, object> ReaderMethodToDelegate(MethodInfo method)
         {
-            var invoker = MethodInvoker.GetHandler(method);
-            return reader => invoker(reader);
+            if (MethodExtensions.DisableFastInvoker)
+                return reader => method.Invoke(reader, null);
+
+            try
+            {
+                var invoker = MethodInvoker.GetHandler(method);
+                return reader => invoker(reader);
+            }
+            catch
+            {
+                return reader => method.Invoke(reader, null);
+            }
         }
     }
 }

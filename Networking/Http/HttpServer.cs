@@ -256,7 +256,7 @@ namespace Networking.Http
 
         public void DeleteRoutes<TRoutes>()
             => DeleteRoutes(typeof(TRoutes));
-        
+
         public void DeleteRoutes(Assembly assembly)
         {
             foreach (var type in assembly.GetTypes())

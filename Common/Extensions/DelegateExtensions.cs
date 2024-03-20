@@ -7,16 +7,18 @@ namespace Common.Extensions
 {
     public static class DelegateExtensions
     {
-        public static LogOutput log = new LogOutput("Delegate Extensions").Setup();
-        public static bool isLogging = ModuleInitializer.IsDebugBuild || ConsoleArgs.HasSwitch("delegateLogger");
+        public static readonly LogOutput Log = new LogOutput("Delegate Extensions").Setup();
+        public static readonly bool EnableLogging = ModuleInitializer.IsDebugBuild || ConsoleArgs.HasSwitch("delegateLogger");
+
+        public static bool DisableFastInvoker;
 
         public static void Call(this Action action, Action callback = null, Action<Exception> errorCallback = null)
         {
             if (action is null)
                 return;
 
-            if (isLogging)
-                log.Debug($"Calling function: {action.Method.ToName()}");
+            if (EnableLogging)
+                Log.Debug($"Calling function: {action.Method.ToName()}");
 
             try
             {
@@ -26,7 +28,7 @@ namespace Common.Extensions
             catch (Exception ex)
             {
                 errorCallback.Call(ex);
-                log.Error($"An error ocurred while executing '{action.Method.ToName()}':\n{ex}");
+                Log.Error($"An error ocurred while executing '{action.Method.ToName()}':\n{ex}");
             }
         }
 
@@ -35,8 +37,8 @@ namespace Common.Extensions
             if (action is null)
                 return;
 
-            if (isLogging)
-                log.Debug($"Calling function: {action.Method.ToName()}");
+            if (EnableLogging)
+                Log.Debug($"Calling function: {action.Method.ToName()}");
 
             try
             {
@@ -46,7 +48,7 @@ namespace Common.Extensions
             catch (Exception ex)
             {
                 errorCallback.Call(ex);
-                log.Error($"An error ocurred while executing '{action.Method.ToName()}':\n{ex}");
+                Log.Error($"An error ocurred while executing '{action.Method.ToName()}':\n{ex}");
             }
         }
 
@@ -55,8 +57,8 @@ namespace Common.Extensions
             if (action is null)
                 return;
 
-            if (isLogging)
-                log.Debug($"Calling function: {action.Method.ToName()}");
+            if (EnableLogging)
+                Log.Debug($"Calling function: {action.Method.ToName()}");
 
             try
             {
@@ -66,7 +68,7 @@ namespace Common.Extensions
             catch (Exception ex)
             {
                 errorCallback.Call(ex);
-                log.Error($"An error ocurred while executing '{action.Method.ToName()}':\n{ex}");
+                Log.Error($"An error ocurred while executing '{action.Method.ToName()}':\n{ex}");
             }
         }
 
@@ -75,8 +77,8 @@ namespace Common.Extensions
             if (action is null)
                 return;
 
-            if (isLogging)
-                log.Debug($"Calling function: {action.Method.ToName()}");
+            if (EnableLogging)
+                Log.Debug($"Calling function: {action.Method.ToName()}");
 
             try
             {
@@ -86,7 +88,7 @@ namespace Common.Extensions
             catch (Exception ex)
             {
                 errorCallback.Call(ex);
-                log.Error($"An error ocurred while executing '{action.Method.ToName()}':\n{ex}");
+                Log.Error($"An error ocurred while executing '{action.Method.ToName()}':\n{ex}");
             }
         }
 
@@ -95,8 +97,8 @@ namespace Common.Extensions
             if (func is null)
                 return default;
 
-            if (isLogging)
-                log.Debug($"Calling function: {func.Method.ToName()}");
+            if (EnableLogging)
+                Log.Debug($"Calling function: {func.Method.ToName()}");
 
             try
             {
@@ -105,7 +107,7 @@ namespace Common.Extensions
             catch (Exception ex)
             {
                 errorCallback.Call(ex);
-                log.Error($"An error ocurred while executing '{func.Method.ToName()}':\n{ex}");
+                Log.Error($"An error ocurred while executing '{func.Method.ToName()}':\n{ex}");
             }
 
             return default;
@@ -116,8 +118,8 @@ namespace Common.Extensions
             if (func is null)
                 return default;
 
-            if (isLogging)
-                log.Debug($"Calling function: {func.Method.ToName()}");
+            if (EnableLogging)
+                Log.Debug($"Calling function: {func.Method.ToName()}");
 
             try
             {
@@ -126,7 +128,7 @@ namespace Common.Extensions
             catch (Exception ex)
             {
                 errorCallback.Call(ex);
-                log.Error($"An error ocurred while executing '{func.Method.ToName()}':\n{ex}");
+                Log.Error($"An error ocurred while executing '{func.Method.ToName()}':\n{ex}");
             }
 
             return default;
@@ -137,8 +139,8 @@ namespace Common.Extensions
             if (func is null)
                 return default;
 
-            if (isLogging)
-                log.Debug($"Calling function: {func.Method.ToName()}");
+            if (EnableLogging)
+                Log.Debug($"Calling function: {func.Method.ToName()}");
 
             try
             {
@@ -147,7 +149,7 @@ namespace Common.Extensions
             catch (Exception ex)
             {
                 errorCallback.Call(ex);
-                log.Error($"An error ocurred while executing '{func.Method.ToName()}':\n{ex}");
+                Log.Error($"An error ocurred while executing '{func.Method.ToName()}':\n{ex}");
             }
 
             return default;

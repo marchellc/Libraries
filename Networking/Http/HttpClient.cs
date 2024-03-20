@@ -21,7 +21,7 @@ namespace Networking.Http
 
         public LogOutput Log { get; set; }
 
-        public int MaxRetries { get; set; } 
+        public int MaxRetries { get; set; }
 
         public bool IsRunning { get; set; }
         public bool IsLogging { get; set; }

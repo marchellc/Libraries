@@ -13,8 +13,6 @@ namespace Common.IO.Data
     {
         public static LogOutput Log { get; private set; }
 
-        public static event Action<Type, MethodInfo, FastInvokeHandler> OnReaderCached;
-
         internal static void Initialize()
         {
             Log = new LogOutput("Reader Loader");
@@ -86,30 +84,31 @@ namespace Common.IO.Data
                     if (method.HasAttribute<DataReaderAttribute>(out var dataReaderAttribute) && dataReaderAttribute.ReplacedType != null)
                         readerType = dataReaderAttribute.ReplacedType;
 
-                    FastInvokeHandler invokeHandler = null;
-
-                    try
+                    if (!DelegateExtensions.DisableFastInvoker)
                     {
-                        invokeHandler = MethodInvoker.GetHandler(method);
+                        try
+                        {
+                            var invokeHandler = MethodInvoker.GetHandler(method);
+                            DataReaderUtils.Readers[readerType] = reader => invokeHandler(null, reader);
+                        }
+                        catch (Exception ex)
+                        {
+                            Log.Warn($"Failed to create fast invoke handler for method '{method.ToName()}', falling back to reflection:\n{ex}");
+                            DataReaderUtils.Readers[readerType] = reader => method.Invoke(reader, null);
+                        }
                     }
-                    catch (Exception ex)
+                    else
                     {
-                        Log.Error($"Failed to create fast invoke handler for method '{method.ToName()}':\n{ex}");
-                        continue;
+                        DataReaderUtils.Readers[readerType] = reader => method.Invoke(reader, null);
                     }
-
-                    DataReaderUtils.Readers[readerType] = reader => invokeHandler(null, reader);
 
                     Log.Verbose($"Cached data reader: ({readerType.FullName}) {method.ToName()}");
-
-                    OnReaderCached.Call(readerType, method, invokeHandler);
                 }
             }
             catch 
             {
 
             }
-
         }
 
         private static void OnAssemblyLoaded(object _, AssemblyLoadEventArgs ev)

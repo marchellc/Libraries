@@ -30,7 +30,7 @@ namespace Common.Logging
             if (!string.IsNullOrWhiteSpace(source))
                 Name = source;
 
-            Enabled = LogUtils.General;
+            Enabled = LogUtils.Default;
             allOutputs.Add(this);
 
             Raw($"Created a new logger '{Name}' (level: {Enabled})", ConsoleColor.Cyan);
@@ -187,6 +187,18 @@ namespace Common.Logging
 
             foreach (var output in allOutputs)
                 output.loggers?.RemoveAll(l => l.GetType() == type);
+        }
+
+        public static void EnableForAll(LogLevel level)
+        {
+            foreach (var output in allOutputs)
+                output.Enable(level);
+        }
+
+        public static void DisableForAll(LogLevel level)
+        {
+            foreach (var output in allOutputs)
+                output.Disable(level);
         }
 
         internal static void Init()

@@ -4,7 +4,7 @@ namespace Common.Utilities
 {
     public class Disposable : IDisposable
     {
-        private bool isDiposed;
+        internal bool isDiposed;
 
         public bool IsDisposed
         {

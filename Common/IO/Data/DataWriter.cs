@@ -6,6 +6,7 @@ using System;
 using System.Text;
 using System.Collections.Generic;
 using System.Reflection;
+using System.Net;
 
 namespace Common.IO.Data
 {
@@ -259,9 +260,21 @@ namespace Common.IO.Data
             WriteInt(v.Revision);
         }
 
+        public void WriteIpAddress(IPAddress address)
+        {
+            var data = address.GetAddressBytes();
+            WriteBytes(data);
+        }
+
+        public void WriteIpEndPoint(IPEndPoint endPoint)
+        {
+            WriteIpAddress(endPoint.Address);
+            WriteCompressedULong((ulong)endPoint.Port);
+        }
+
         public void WriteType(Type type)
         {
-            var typeCode = type.ToShortCode();
+            var typeCode = type.GetShortCode();
             WriteUShort(typeCode);
         }
 
@@ -293,7 +306,7 @@ namespace Common.IO.Data
 
         public void WriteWriter(DataWriter w)
         {
-            var data = w.Buffer.Buffer.ToArray();
+            var data = w.Data;
             WriteBytes(data);
         }
 
@@ -415,6 +428,21 @@ namespace Common.IO.Data
                 WriteUShort(property.ToShortCode());
                 WriteObject(propValue);
             }
+        }
+
+        public void Return()
+            => PoolablePool<DataWriter>.Shared.Return(this);
+
+        public static DataWriter Get()
+            => PoolablePool<DataWriter>.Shared.Rent() ?? new DataWriter();
+
+        public static byte[] Write(Action<DataWriter> writer)
+        {
+            var pooled = Get();
+            writer.Call(pooled);
+            var data = pooled.Data;
+            pooled.Return();
+            return data;
         }
 
         private void EnsureEncoding()

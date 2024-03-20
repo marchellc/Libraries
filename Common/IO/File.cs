@@ -1,6 +1,7 @@
-﻿using Common.Pooling.Pools;
+﻿using Common.Logging;
+using Common.Pooling.Pools;
 using Common.Utilities;
-
+using System;
 using System.Collections.Generic;
 using System.IO;
 
@@ -156,6 +157,8 @@ namespace Common.IO
 
             var fullPath = $"{directory}/{file}";
 
+            LogOutput.Common.Info($"Reading JSON '{typeof(T).FullName}' from file '{fullPath}'");
+
             if (!System.IO.File.Exists(fullPath))
             {
                 Write(directory, file, defaultValue);
@@ -169,8 +172,9 @@ namespace Common.IO
 
                 return result;
             }
-            catch
+            catch (Exception ex)
             {
+                LogOutput.Common.Error(ex);
                 Write(directory, file, defaultValue);
                 return defaultValue;
             }
@@ -189,12 +193,18 @@ namespace Common.IO
 
             var fullPath = $"{directory}/{file}";
 
+            LogOutput.Common.Info($"Writing JSON '{value?.GetType().FullName ?? "null"}' to file '{fullPath}'");
+
             try
             {
                 var json = value.JsonSerialize();
+
                 System.IO.File.WriteAllText(fullPath, json);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                LogOutput.Common.Error(ex);
+            }
         }
 
         public static void WriteCurrent(string file, object value)

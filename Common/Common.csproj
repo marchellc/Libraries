@@ -286,7 +286,7 @@
     <Compile Include="Logging\LogMessage.cs" />
     <Compile Include="Logging\LogOutput.cs" />
     <Compile Include="Logging\LogUtils.cs" />
-    <Compile Include="Pooling\Poolable.cs" />
+    <Compile Include="Pooling\PoolableItem.cs" />
     <Compile Include="Pooling\Pools\DictionaryPool.cs" />
     <Compile Include="Pooling\Pools\HashSetPool.cs" />
     <Compile Include="Pooling\Pools\ListPool.cs" />

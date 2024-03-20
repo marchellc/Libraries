@@ -2,8 +2,6 @@
 using System.Text;
 using System;
 
-using Common.Pooling.Pools;
-
 namespace Networking.Pinging
 {
     public struct PingResult

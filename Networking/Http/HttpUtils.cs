@@ -8,16 +8,12 @@ namespace Networking.Http
     {
         public static void Respond(this IHttpContext ctx, HttpResponseData responseData)
             => HttpResponseData.Respond(ctx, responseData);
-
         public static void RespondOk(this IHttpContext ctx, string responseData = null)
             => Respond(ctx, HttpResponseData.Ok(responseData ?? string.Empty));
-
         public static void RespondOk<TResponse>(this IHttpContext ctx, TResponse response)
             => Respond(ctx, HttpResponseData.Ok<TResponse>(response));
-
         public static void RespondFail(this IHttpContext ctx, string responseData = null, int responseCode = 401)
             => Respond(ctx, HttpResponseData.Fail(responseData ?? string.Empty, responseCode));
-
         public static void RespondFail<TResponse>(this IHttpContext ctx, TResponse responseData, int responseCode = 401)
             => Respond(ctx, HttpResponseData.Fail(JsonSerializer.Serialize(responseData), responseCode));
 

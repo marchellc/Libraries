@@ -22,6 +22,9 @@ namespace Common.Extensions
         public static readonly OpCode[] OneByteCodes;
         public static readonly OpCode[] TwoByteCodes;
 
+        public static bool DisableFastInvoker => DelegateExtensions.DisableFastInvoker;
+        public static bool EnableLogging;
+
         static MethodExtensions()
         {
             OneByteCodes = new OpCode[225];
@@ -148,13 +151,21 @@ namespace Common.Extensions
         }
 
         public static object Call(this MethodBase method, object instance, params object[] args)
-            => Call(method, instance, LogOutput.Common.Error, args);
+        {
+            if (EnableLogging)
+                Log.Info($"Executing method: {method.ToName()} with instance '{instance?.GetType().FullName ?? "null"}' and {args.Length} args");
+
+            return Call(method, instance, Log.Error, args);
+        }
 
         public static object Call(this MethodBase method, object instance, Action<Exception> errorCallback, params object[] args)
         {
             try
             {
-                if (method is MethodInfo info)
+                if (EnableLogging)
+                    Log.Info($"Executing method: {method.ToName()} with instance '{instance?.GetType().FullName ?? "null"}' and {args.Length} args");
+
+                if (method is MethodInfo info && !DisableFastInvoker)
                 {
                     var invoker = HarmonyLib.MethodInvoker.GetHandler(info);
 
@@ -173,7 +184,10 @@ namespace Common.Extensions
 
         public static object CallUnsafe(this MethodBase method, object instance, params object[] args)
         {
-            if (method is MethodInfo info)
+            if (EnableLogging)
+                Log.Info($"Executing method UNSAFE: {method.ToName()} with instance '{instance?.GetType().FullName ?? "null"}' and {args.Length} args");
+
+            if (method is MethodInfo info && !DisableFastInvoker)
             {
                 var invoker = HarmonyLib.MethodInvoker.GetHandler(info);
 

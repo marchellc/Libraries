@@ -4,6 +4,7 @@ using Common.Logging.Console;
 using System;
 using System.IO;
 using System.Runtime.InteropServices;
+
 using Common.Extensions;
 
 namespace Common.Logging
@@ -19,10 +20,15 @@ namespace Common.Logging
         public const LogLevel General = LogLevel.Information | LogLevel.Warning | LogLevel.Error | LogLevel.Fatal;
         public const LogLevel Debug = LogLevel.Debug | LogLevel.Trace | LogLevel.Verbose;
 
+        public static LogLevel Default;
+
         public static bool IsConsoleAvailable
         {
             get
             {
+                if (Environment.OSVersion.Platform != PlatformID.Win32NT)
+                    return true;
+
                 if (consChecked)
                     return consAvailable;
 

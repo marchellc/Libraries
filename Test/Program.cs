@@ -1,10 +1,11 @@
 ﻿using Common.Logging;
+using Common.Utilities;
+
+using Networking.Client;
+using Networking.Server;
 
 using System.Threading.Tasks;
-
-using Common.Utilities.Generation;
-using Common.Caching;
-using Common.IO;
+using System.Net;
 
 namespace Test
 {
@@ -13,26 +14,16 @@ namespace Test
         public static async Task Main(string[] args)
         {
             var log = new LogOutput("Test").Setup();
-            var cache = new FileCache<byte>();
-            var unique = new UniqueByteGenerator(cache);
-            var watcher = new FileWatcher($"{System.IO.Directory.GetCurrentDirectory()}/cache");
+            var port = int.Parse(ConsoleArgs.GetValue("port"));
 
-            if (!System.IO.File.Exists($"{System.IO.Directory.GetCurrentDirectory()}/cache"))
-                System.IO.File.Create($"{System.IO.Directory.GetCurrentDirectory()}/cache").Close();
-
-            cache.SaveOnChange = true;
-            cache.DefaultPath = $"{System.IO.Directory.GetCurrentDirectory()}/cache";
-            cache.Load($"{System.IO.Directory.GetCurrentDirectory()}/cache");
-
-            watcher.OnChanged += () =>
+            if (ConsoleArgs.HasSwitch("server"))
             {
-                log.Info("Watched cache has changed");
-            };
-
-            for (int i = 0; i < 10; i++)
+                NetServer.Instance.Port = port;
+                NetServer.Instance.Start();
+            }
+            else
             {
-                var randomId = unique.Next();
-                log.Info($"New random: {randomId}");
+                NetClient.Instance.Connect(new IPEndPoint(IPAddress.Loopback, port));
             }
 
             await Task.Delay(-1);

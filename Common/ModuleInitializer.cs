@@ -65,12 +65,16 @@ namespace Common
 
                 Directory = new Directory($"{appData}/CommonLib/{appName}");
 
+                LogUtils.Default = LogUtils.General;
                 LogOutput.Init();
 
-                ConsoleArgs.Parse(Environment.GetCommandLineArgs().Skip(1).ToArray());
+                ConsoleArgs.Parse(Environment.GetCommandLineArgs());
 
                 if (IsDebugBuild || ConsoleArgs.HasSwitch("DebugLogs"))
+                {
                     LogOutput.Common.Enable(LogLevel.Debug);
+                    LogUtils.Default = LogUtils.General | LogUtils.Debug;
+                }
 
                 if (ConsoleArgs.HasSwitch("InvariantCulture"))
                 {
@@ -93,6 +97,9 @@ namespace Common
                 }
 
                 LogOutput.Common.Info($"Directory: {Directory.Path}");
+
+                MethodExtensions.EnableLogging = ConsoleArgs.HasSwitch("MethodLogger");
+                DelegateExtensions.DisableFastInvoker = ConsoleArgs.HasSwitch("DisableInvoker");
 
                 DataWriterLoader.Initialize();
                 DataReaderLoader.Initialize();

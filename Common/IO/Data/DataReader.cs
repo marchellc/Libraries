@@ -8,6 +8,7 @@ using System.IO;
 using System.Text;
 using System.Collections.Generic;
 using System.Reflection;
+using System.Net;
 
 namespace Common.IO.Data
 {
@@ -262,6 +263,20 @@ namespace Common.IO.Data
             return new Version(major, minor, build, revision);
         }
 
+        public IPAddress ReadIpAddress()
+        {
+            var data = ReadBytes();
+            return new IPAddress(data);
+        }
+
+        public IPEndPoint ReadIpEndPoint()
+        {
+            var address = ReadIpAddress();
+            var port = (int)ReadCompressedULong();
+
+            return new IPEndPoint(address, port);
+        }
+
         public Type ReadType()
         {
             var typeCode = ReadUShort();
@@ -377,12 +392,12 @@ namespace Common.IO.Data
             return data;
         }
 
-        public T Read<T>(T defaultValue = default)
+        public T Read<T>()
         {
             var isNull = ReadBool();
 
             if (isNull)
-                return defaultValue;
+                return default;
 
             if (typeof(T).IsEnum)
                 return (T)(object)DataReaderUtils.ReadEnum(this);
@@ -409,8 +424,8 @@ namespace Common.IO.Data
             return Read<T>();
         }
 
-        public void ReadRef<T>(ref T value, T defaultValue = default)
-            => value = Read(defaultValue);
+        public void ReadRef<T>(ref T value)
+            => value = Read<T>();
 
         public T[] ReadArray<T>()
         {
@@ -551,6 +566,23 @@ namespace Common.IO.Data
 
                 (property as PropertyInfo).SetValueFast(propertyValue, value);
             }
+        }
+
+        public void Return()
+            => PoolablePool<DataReader>.Shared.Return(this);
+
+        public static DataReader Get(byte[] data)
+        {
+            var reader = PoolablePool<DataReader>.Shared.Rent() ?? new DataReader();
+            reader.Set(data);
+            return reader;
+        }
+
+        public static void Read(byte[] data, Action<DataReader> reader)
+        {
+            var read = Get(data);
+            reader.Call(read);
+            read.Return();
         }
 
         private void EnsureEncoding()

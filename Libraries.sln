@@ -5,11 +5,11 @@ VisualStudioVersion = 17.8.34302.71
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Common", "Common\Common.csproj", "{0DCB7D50-8F0E-4569-B68C-4B32AD904469}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Telepathy", "..\Telepathy\Telepathy\Telepathy.csproj", "{3443B723-0527-41A8-B367-95B7FA1AFEDC}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Test", "Test\Test.csproj", "{13186E55-2C19-4697-95CF-EA3585A8A8F6}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Networking", "Networking\Networking.csproj", "{B16FA462-A4E7-43B5-AAC1-B980343933C1}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DiscordUtilities", "DiscordUtilities\DiscordUtilities.csproj", "{DC2BE869-762B-4FF1-ABF4-4BC7E58BF724}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Networking", "Networking\Networking.csproj", "{C685ECF7-F8CA-4B3A-BCB4-11EB12FBBB21}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -21,18 +21,18 @@ Global
 		{0DCB7D50-8F0E-4569-B68C-4B32AD904469}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{0DCB7D50-8F0E-4569-B68C-4B32AD904469}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{0DCB7D50-8F0E-4569-B68C-4B32AD904469}.Release|Any CPU.Build.0 = Release|Any CPU
-		{3443B723-0527-41A8-B367-95B7FA1AFEDC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{3443B723-0527-41A8-B367-95B7FA1AFEDC}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{3443B723-0527-41A8-B367-95B7FA1AFEDC}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{3443B723-0527-41A8-B367-95B7FA1AFEDC}.Release|Any CPU.Build.0 = Release|Any CPU
 		{13186E55-2C19-4697-95CF-EA3585A8A8F6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{13186E55-2C19-4697-95CF-EA3585A8A8F6}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{13186E55-2C19-4697-95CF-EA3585A8A8F6}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{13186E55-2C19-4697-95CF-EA3585A8A8F6}.Release|Any CPU.Build.0 = Release|Any CPU
-		{B16FA462-A4E7-43B5-AAC1-B980343933C1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{B16FA462-A4E7-43B5-AAC1-B980343933C1}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{B16FA462-A4E7-43B5-AAC1-B980343933C1}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{B16FA462-A4E7-43B5-AAC1-B980343933C1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{DC2BE869-762B-4FF1-ABF4-4BC7E58BF724}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DC2BE869-762B-4FF1-ABF4-4BC7E58BF724}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DC2BE869-762B-4FF1-ABF4-4BC7E58BF724}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DC2BE869-762B-4FF1-ABF4-4BC7E58BF724}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C685ECF7-F8CA-4B3A-BCB4-11EB12FBBB21}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C685ECF7-F8CA-4B3A-BCB4-11EB12FBBB21}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C685ECF7-F8CA-4B3A-BCB4-11EB12FBBB21}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C685ECF7-F8CA-4B3A-BCB4-11EB12FBBB21}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

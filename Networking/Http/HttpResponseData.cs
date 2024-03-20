@@ -19,7 +19,7 @@ namespace Networking.Http
         public static HttpResponseData MissingKey()
             => new HttpResponseData
             {
-                Code = 401,
+                Code = 50,
 
                 Data = "MISSING_AUTH",
 
@@ -29,14 +29,14 @@ namespace Networking.Http
         public static HttpResponseData InvalidKey()
             => new HttpResponseData
             {
-                Code = 401,
+                Code = 51,
 
                 Data = "INVALID_AUTH",
 
                 Success = false
             };
 
-        public static HttpResponseData Ok<TObject>(TObject response, int responseCode = 200)
+        public static HttpResponseData Ok<TObject>(TObject response, int responseCode = 0)
             => new HttpResponseData
             {
                 Code = responseCode,
@@ -46,7 +46,7 @@ namespace Networking.Http
                 Success = false
             };
 
-        public static HttpResponseData Ok(string response, int responseCode = 200)
+        public static HttpResponseData Ok(string response, int responseCode = 0)
             => new HttpResponseData
             {
                 Code = responseCode,
@@ -55,7 +55,7 @@ namespace Networking.Http
                 Success = false
             };
 
-        public static HttpResponseData Fail(string response = null, int responseCode = 403)
+        public static HttpResponseData Fail(string response = null, int responseCode = 20)
             => new HttpResponseData
             {
                 Code = responseCode,
@@ -69,7 +69,7 @@ namespace Networking.Http
             if (context.WasRespondedTo)
                 return;
 
-            context.Response.StatusCode = responseData.Code;
+            context.Response.StatusCode = responseData.Code < 10 ? 203 : 401;
             context.Response.StatusDescription = responseData.Data;
 
             context.Response.SendResponseAsync(JsonSerializer.Serialize(responseData));

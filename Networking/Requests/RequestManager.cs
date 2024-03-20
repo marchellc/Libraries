@@ -1,163 +1,151 @@
 ﻿using Common.Extensions;
 using Common.IO.Collections;
-using Common.Utilities;
-
-using Networking.Components;
 
 using System;
 using System.Threading.Tasks;
 
 namespace Networking.Requests
 {
-    public class RequestManager : NetworkComponent
+    public class RequestManager : NetComponent
     {
-        private LockedDictionary<string, RequestInfo> requests;
-        private LockedDictionary<string, Action<ResponseInfo, object>> responses;
-        private LockedDictionary<Type, Action<RequestInfo, object>> listeners;
+        private readonly LockedDictionary<Type, Action<RequestInfo, object>> handlers = new LockedDictionary<Type, Action<RequestInfo, object>>();
+        private readonly LockedDictionary<ulong, RequestInfo> requests = new LockedDictionary<ulong, RequestInfo>();
 
-        public override void OnStart()
+        private ulong requestId = 0;
+
+        public event Action<RequestInfo> OnReceived;
+        public event Action<RequestInfo> OnResponded;
+
+        public override void Start()
         {
-            base.OnStart();
-
-            requests ??= new LockedDictionary<string, RequestInfo>();
-            responses ??= new LockedDictionary<string, Action<ResponseInfo, object>>();
-            listeners ??= new LockedDictionary<Type, Action<RequestInfo, object>>();
+            base.Start();
+            Listener.Listen(new RequestInfo.RequestListener());
         }
 
-        public override void OnDestroy()
+        public override void Stop()
         {
+            base.Stop();
+
+            Listener.Clear<RequestInfo>();
+
+            handlers.Clear();
             requests.Clear();
-            responses.Clear();
-            listeners.Clear();
+
+            requestId = 0;
         }
 
-        public void Listen<T>(Action<RequestInfo, T> listener)
-            => listeners[typeof(T)] = (req, msg) =>
-            {
-                if (msg != null)
-                    listener.Call(req, (T)msg, null, Log.Error);
-                else
-                    listener.Call(req, default, null, Log.Error);
-            };
+        public void Listen<T>(Action<RequestInfo, T> handler)
+            => handlers[typeof(T)] = (req, value) => handler.Call(req, (T)value);
 
-        public async Task<(T response, bool isSuccess)> RequestAsync<T>(object request)
+        public async Task<T> SendAsync<T>(object request)
         {
-            ResponseInfo response = default;
-            T responseValue = default;
-            bool isReceived = false;
-
-            Request<T>(request, (res, msg) =>
+            try
             {
-                responseValue = msg;
-                response = res;
+                var info = new RequestInfo(++requestId, request);
+                var response = false;
 
-                isReceived = true;
-            });
-
-            while (!isReceived)
-                await Task.Delay(100);
-
-            return (responseValue, response.IsSuccess);
-        }
-
-        public void Request<T>(object request, Action<ResponseInfo, T> responseHandler)
-        {
-            var requestId = Generator.Instance.GetString();
-            
-            while (requests.ContainsKey(requestId))
-                requestId = Generator.Instance.GetString();
-
-            var requestInfo = new RequestInfo(requestId, request);
-
-            requestInfo.Manager = this;
-
-            requests[requestId] = requestInfo;
-            responses[requestId] = (response, msg) =>
-            {
-                if (msg is null)
+                info.Manager = this;
+                info.handler = (req, value) =>
                 {
-                    responseHandler.Call(response, default, null, Log.Error);
+                    response = true;
+                    info = req;
+                };
+
+                Send(info);
+
+                Log.Verbose($"Sent async request '{info.Id}' ({request.GetType().FullName})");
+
+                while (!response)
+                    await Task.Delay(50);
+
+                return info.IsSuccess ? (T)info.Response : default;
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex);
+                return default;
+            }
+        }
+
+        public void Send<T>(object request, Action<RequestInfo, T> response)
+        {
+            if (request is null)
+                throw new ArgumentNullException(nameof(request));
+
+            if (response is null)
+                throw new ArgumentNullException(nameof(response));
+
+            try
+            {
+                var info = new RequestInfo(++requestId, request);
+
+                info.Manager = this;
+                info.handler = (req, value) => response.Call(req, (T)value);
+
+                requests[info.Id] = info;
+
+                Send(info);
+
+                Log.Verbose($"Sent request '{info.Id}' ({request.GetType().FullName})");
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex);
+            }
+        }
+
+        internal void OnResponse(RequestInfo request)
+        {
+            try
+            {
+                if (request.Response is null || !request.HasResponse)
+                {
+                    Log.Warn($"Received an invalid response");
                     return;
                 }
 
-                responseHandler.Call(response, (T)msg, null, Log.Error);
-            };
+                if (!requests.TryGetValue(requestId, out var cachedRequest))
+                {
+                    Log.Warn($"Received an unknown response");
+                    return;
+                }
 
-            if (Client.IsServer)
-                CallRpcSendResponse(requestInfo);
-            else
-                CallCmdSendResponse(requestInfo);
+                cachedRequest.handler.Call(request, request.Response);
+
+                OnReceived.Call(request);
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex);
+            }
         }
 
-        public void Respond(RequestInfo request, object response, bool isSuccess)
+        internal void OnRequest(RequestInfo request)
         {
-            request.Response = new ResponseInfo(request.Id, response, isSuccess);
-            request.IsResponded = true;
-            request.Manager = this;
-
-            if (Client.IsServer)
-                CallRpcReceiveResponse(request.Response);
-            else
-                CallCmdReceiveResponse(request.Response);
-        }
-
-        public void CallRpcSendResponse(RequestInfo request)
-            => InvokeRpc("RpcSendResponse", request);
-
-        public void CallRpcReceiveResponse(ResponseInfo response)
-            => InvokeRpc("RpcReceiveResponse", response);
-
-        public void CallCmdSendResponse(RequestInfo request)
-            => InvokeCmd("CmdSendResponse", request);
-
-        public void CallCmdReceiveResponse(ResponseInfo response)
-            => InvokeCmd("CmdReceiveResponse", response);
-
-        private void RpcSendResponse(RequestInfo request)
-            => ProcessRequest(request);
-
-        private void RpcReceiveResponse(ResponseInfo response)
-            => ProcessResponse(response);
-
-        private void CmdSendResponse(RequestInfo request)
-            => ProcessRequest(request);
-
-        private void CmdReceiveResponse(ResponseInfo response)
-            => ProcessResponse(response);
-
-        private void ProcessRequest(RequestInfo request)
-        {
-            if (request.Request is null)
+            try
             {
-                Log.Warn($"Received a null request!");
-                return;
+                if (request.Value is null)
+                {
+                    Log.Warn($"Received a request with an empty object!");
+                    return;
+                }
+
+                var type = request.Value.GetType();
+
+                if (!handlers.TryGetValue(type, out var handler))
+                {
+                    Log.Warn($"No handlers present for request '{type.FullName}'");
+                    return;
+                }
+
+                handler.Call(request, request.Value);
+
+                OnResponded.Call(request);
             }
-
-            var requestType = request.Request.GetType();
-
-            if (!listeners.TryGetValue(requestType, out var listener))
+            catch (Exception ex)
             {
-                Log.Warn($"No listeners were found for type {requestType.FullName}!");
-                return;
+                Log.Error(ex);
             }
-
-            listener.Call(request, request.Request, null, Log.Error);
-        }
-
-        private void ProcessResponse(ResponseInfo response)
-        {
-            if (!responses.TryGetValue(response.Id, out var responseHandler))
-            {
-                Log.Warn($"No response handlers for request {response.Id}");
-                return;
-            }
-
-            response.Manager = this;
-
-            requests.Remove(response.Id);
-            responses.Remove(response.Id);
-
-            responseHandler.Call(response, response.Response, null, Log.Error);
         }
     }
 }

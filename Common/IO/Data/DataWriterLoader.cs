@@ -13,8 +13,6 @@ namespace Common.IO.Data
     {
         public static LogOutput Log { get; private set; }
 
-        public static event Action<Type, MethodInfo, FastInvokeHandler> OnWriterCached;
-
         internal static void Initialize()
         {
             Log = new LogOutput("Writer Loader");
@@ -88,23 +86,25 @@ namespace Common.IO.Data
                     if (method.HasAttribute<DataWriterAttribute>(out var dataWriterAttribute) && dataWriterAttribute.ReplacedType != null)
                         writerType = dataWriterAttribute.ReplacedType;
 
-                    FastInvokeHandler invokeHandler = null;
-
-                    try
+                    if (!DelegateExtensions.DisableFastInvoker)
                     {
-                        invokeHandler = MethodInvoker.GetHandler(method);
+                        try
+                        {
+                            var invokeHandler = MethodInvoker.GetHandler(method);
+                            DataWriterUtils.Writers[writerType] = (writer, value) => invokeHandler(null, writer, value);
+                        }
+                        catch (Exception ex)
+                        {
+                            Log.Error($"Failed to create fast invoke handler for method '{method.ToName()}', falling back to reflection:\n{ex}");
+                            DataWriterUtils.Writers[writerType] = (writer, value) => method.Invoke(writer, new object[] { value });
+                        }
                     }
-                    catch (Exception ex)
+                    else
                     {
-                        Log.Error($"Failed to create fast invoke handler for method '{method.ToName()}':\n{ex}");
-                        continue;
+                        DataWriterUtils.Writers[writerType] = (writer, value) => method.Invoke(writer, new object[] { value });
                     }
-
-                    DataWriterUtils.Writers[writerType] = (writer, value) => invokeHandler(null, writer, value);
 
                     Log.Verbose($"Cached data writer: ({writerType.FullName}) {method.ToName()}");
-
-                    OnWriterCached.Call(writerType, method, invokeHandler);
                 }
             }
             catch 
