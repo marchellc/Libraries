@@ -1,6 +1,6 @@
-﻿using Common.Attributes;
-using Common.Attributes.Custom;
-using Common.Pooling.Pools;
+﻿using Common.Pooling.Pools;
+using Common.Logging.File;
+using Common.Utilities.Exceptions;
 using Common.Logging;
 using Common.Utilities;
 using Common.Extensions;
@@ -55,20 +55,27 @@ namespace Common
 
                 var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
 
-                if (!System.IO.Directory.Exists($"{appData}/CommonLib"))
-                    System.IO.Directory.CreateDirectory($"{appData}/CommonLib");
+                if (!System.IO.Directory.Exists($"{appData}/Common Library"))
+                    System.IO.Directory.CreateDirectory($"{appData}/Common Library");
 
                 var appName = GetAppName();
 
-                if (!System.IO.Directory.Exists($"{appData}/CommonLib/{appName}"))
-                    System.IO.Directory.CreateDirectory($"{appData}/CommonLib/{appName}");
+                if (!System.IO.Directory.Exists($"{appData}/Common Library/{appName}"))
+                    System.IO.Directory.CreateDirectory($"{appData}/Common Library/{appName}");
 
-                Directory = new Directory($"{appData}/CommonLib/{appName}");
+                Directory = new Directory($"{appData}/Common Library/{appName}");
 
-                LogUtils.Default = LogUtils.General;
+                LogUtils.Default = IsDebugBuild ? LogUtils.General | LogUtils.Debug : LogUtils.General;
                 LogOutput.Init();
 
+                if (!System.IO.Directory.Exists($"{Directory.Path}/Logs"))
+                    System.IO.Directory.CreateDirectory($"{Directory.Path}/Logs");
+
+                FileLogger.Init($"{Directory.Path}/{DateTime.Now.Day}_{DateTime.Now.Month} {DateTime.Now.Hour}h {DateTime.Now.Minute}m.txt");
+
                 ConsoleArgs.Parse(Environment.GetCommandLineArgs());
+
+                ExceptionManager.Init();
 
                 if (IsDebugBuild || ConsoleArgs.HasSwitch("DebugLogs"))
                 {
@@ -86,34 +93,13 @@ namespace Common
                     catch { }
                 }
 
-                LogOutput.Common.Info("Initializing Attribute Manager ..");
-
-                AttributeCollector.Init();
-
-                if (LogUtils.IsConsoleAvailable && !ConsoleArgs.HasSwitch("DisableCommands"))
-                {
-                    LogOutput.Common.Info("Initializing commands ..");
+                if (!ConsoleArgs.HasSwitch("DisableCommands"))
                     ConsoleCommands.Enable();
-                }
-
-                LogOutput.Common.Info($"Directory: {Directory.Path}");
 
                 MethodExtensions.EnableLogging = ConsoleArgs.HasSwitch("MethodLogger");
-                DelegateExtensions.DisableFastInvoker = ConsoleArgs.HasSwitch("DisableInvoker");
 
                 DataWriterLoader.Initialize();
                 DataReaderLoader.Initialize();
-
-                AttributeCollector.ForEach<InitAttribute>((data, attr) =>
-                {
-                    if (data.Member is null || data.Member is not MethodBase method)
-                        return;
-
-                    method.Call(data.Instance, ex =>
-                    {
-                        LogOutput.Common.Error($"Failed to invoke init-method '{method.DeclaringType.FullName}::{method.Name}':\n{ex}");
-                    });
-                });
 
                 InitializedAt = DateTime.Now;
 
@@ -133,19 +119,6 @@ namespace Common
 
             OnUnloaded.Call();
             InitializedAt = default;
-
-            AttributeCollector.ForEach<UnloadAttribute>((data, attr) =>
-            {
-                if (data.Member is null || data.Member is not MethodBase method)
-                    return;
-
-                method.Call(data.Instance, ex =>
-                {
-                    LogOutput.Common.Error($"Failed to invoke unload-method '{method.DeclaringType.FullName}::{method.Name}':\n{ex}");
-                });
-            });
-
-            AttributeCollector.Clear();
 
             Assembly = null;
             cachedAppName = null;
@@ -175,7 +148,7 @@ namespace Common
                 using (var proc = Process.GetCurrentProcess())
                     return cachedAppName = System.IO.Path.GetFileNameWithoutExtension(proc.ProcessName);
             }
-            catch { return "Default App"; } 
+            catch { return cachedAppName = "Default App"; }
         }
 
         public static Type[] SafeQueryTypes()

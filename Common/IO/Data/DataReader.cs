@@ -10,6 +10,7 @@ using System.Text;
 using System.Collections.Generic;
 using System.Reflection;
 using System.Net;
+using System.Linq;
 
 namespace Common.IO.Data
 {
@@ -309,10 +310,10 @@ namespace Common.IO.Data
         {
             var type = ReadType();
             var methodCode = ReadUShort();
-            var method = type.FindMember(methodCode);
+            var method = type.GetAllMethods().FirstOrDefault(m => m.Name.GetShortCode() == methodCode);
 
             if (method != null)
-                return (MethodInfo)method;
+                return method;
 
             throw new InvalidDataException($"Cannot find method of ID {methodCode} in type {type.FullName}");
         }
@@ -321,10 +322,10 @@ namespace Common.IO.Data
         {
             var type = ReadType();
             var fieldCode = ReadUShort();
-            var field = type.FindMember(fieldCode);
+            var field = type.GetAllFields().FirstOrDefault(f => f.Name.GetShortCode() == fieldCode);
 
             if (field != null)
-                return (FieldInfo)field;
+                return field;
 
             throw new InvalidDataException($"Cannot find field of ID {fieldCode} in type {type.FullName}");
         }
@@ -333,14 +334,14 @@ namespace Common.IO.Data
         {
             var type = ReadType();
             var propertyCode = ReadUShort();
-            var property = type.FindMember(propertyCode);
+            var property = type.GetAllProperties().FirstOrDefault(p => p.Name.GetShortCode() == propertyCode);
 
             if (property != null)
-                return (PropertyInfo)property;
+                return property;
 
             throw new InvalidDataException($"Cannot find property of ID {propertyCode} in type {type.FullName}");
         }
-        
+
         public DataReader ReadReader()
         {
             var data = ReadBytes();
@@ -393,7 +394,14 @@ namespace Common.IO.Data
 
         [DataLoaderIgnore]
         public T Read<T>()
-            => (T)ReadObject();
+        {
+            var isNull = ReadBool();
+
+            if (isNull)
+                return default;
+
+            return (T)ReadObject();
+        }
 
         [DataLoaderIgnore]
         public T? ReadNullable<T>() where T : struct
@@ -403,7 +411,7 @@ namespace Common.IO.Data
             if (isNull)
                 return null;
 
-            return Read<T>();
+            return (T)ReadObject();
         }
 
         [DataLoaderIgnore]
@@ -552,12 +560,12 @@ namespace Common.IO.Data
             {
                 var propertyHash = ReadUShort();
                 var propertyValue = ReadObject();
-                var property = type.FindMember(propertyHash);
+                var property = type.GetAllProperties().FirstOrDefault(p => p.Name.GetShortCode() == propertyHash);
 
                 if (property is null)
                     throw new InvalidDataException($"Property of ID {propertyHash} was not present in type {type.FullName}");
 
-                (property as PropertyInfo).SetValueFast(propertyValue, value);
+                property.Set(propertyValue, value);
             }
         }
 

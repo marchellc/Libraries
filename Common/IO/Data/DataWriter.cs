@@ -37,7 +37,7 @@ namespace Common.IO.Data
 
             public void Add(byte b)
             {
-                Buffer.Add(b);         
+                Buffer.Add(b);
                 BufferSize = Buffer.Count;
             }
 
@@ -306,7 +306,7 @@ namespace Common.IO.Data
             Write(assemblyImage);
         }
 
-        public void WriteReader(DataReader r)                                                                                                                                              
+        public void WriteReader(DataReader r)
         {
             var data = r.Buffer.Data;
             WriteBytes(data);
@@ -411,7 +411,7 @@ namespace Common.IO.Data
                 if (property is null)
                     throw new InvalidOperationException($"Property of name '{props[i]}' does not exist in type {typeof(T).FullName}");
 
-                var propValue = property.GetValueFast<object>(value);
+                var propValue = property.Get(value);
 
                 WriteUShort(property.ToShortCode());
                 WriteObject(propValue);

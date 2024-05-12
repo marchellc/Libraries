@@ -56,7 +56,7 @@ namespace Common.Pooling.Pools
         {
             var str = builder.ToString();
             Return(builder);
-            return str.SplitByLine();
+            return str.SplitLines();
         }
 
         public string ToStringReturn(StringBuilder builder)

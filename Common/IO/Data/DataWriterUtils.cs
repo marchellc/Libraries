@@ -1,8 +1,5 @@
 ﻿using Common.Extensions;
 using Common.IO.Collections;
-using Common.Logging;
-
-using HarmonyLib;
 
 using System;
 using System.Collections.Generic;
@@ -13,7 +10,6 @@ namespace Common.IO.Data
     public static class DataWriterUtils
     {
         public static readonly LockedDictionary<Type, Action<DataWriter, object>> Writers = new LockedDictionary<Type, Action<DataWriter, object>>();
-        public static readonly LogOutput Log = new LogOutput("Data Writer Utils").Setup();
 
         public static Action<DataWriter, object> GetWriter(Type type)
         {
@@ -51,10 +47,7 @@ namespace Common.IO.Data
             }
 
             if (method != null)
-            {
-                DataWriterLoader.Log.Info($"Cached a new writer for type '{type.FullName}': {method.ToName()}");
                 return Writers[type] = WriterMethodToInvoke(method);
-            }
 
             throw new InvalidOperationException($"No writers assigned for type '{type.FullName}'");
         }
@@ -72,22 +65,7 @@ namespace Common.IO.Data
 
         public static Action<DataWriter, object> WriterMethodToInvoke(MethodInfo method)
         {
-            if (MethodExtensions.DisableFastInvoker)
-                return (writer, value) => method.Invoke(writer, new object[] { value });
-
-            try
-            {
-                var invoker = MethodInvoker.GetHandler(method);
-
-                return (writer, value) =>
-                {
-                    invoker(writer, value);
-                };
-            }
-            catch
-            {
-                return (writer, value) => method.Invoke(writer, new object[] { value });
-            }
+            return (writer, value) => method.Invoke(writer, new object[] { value });
         }
     }
 }

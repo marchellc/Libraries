@@ -1,6 +1,4 @@
-﻿using Fasterflect;
-
-using System;
+﻿using System;
 using System.Linq;
 using System.Reflection;
 using System.Collections.Generic;
@@ -9,7 +7,7 @@ namespace Common.Extensions
 {
     public static class MemberExtensions
     {
-        private static readonly Dictionary<MemberInfo, string> PreviouslyGeneratedNames = new Dictionary<MemberInfo, string>();
+        private static readonly Dictionary<MemberInfo, string> _previouslyGeneratedNames = new Dictionary<MemberInfo, string>();
 
         public static int ToLongCode(this MemberInfo member)
         {
@@ -41,7 +39,10 @@ namespace Common.Extensions
 
         public static string ToName(this MemberInfo member)
         {
-            if (PreviouslyGeneratedNames.TryGetValue(member, out var name))
+            if (member is Type type)
+                return type.FullName;
+
+            if (_previouslyGeneratedNames.TryGetValue(member, out var name))
                 return name;
 
             if (member is MethodInfo method)
@@ -53,7 +54,7 @@ namespace Common.Extensions
                 else if (method.IsPrivate)
                     str += "private ";
 
-                if (method.IsInstance())
+                if (!method.IsStatic)
                     str += "instance ";
                 else
                     str += "static ";
@@ -86,14 +87,11 @@ namespace Common.Extensions
                     str += ")";
                 }
 
-                return PreviouslyGeneratedNames[method] = str;
+                return _previouslyGeneratedNames[method] = str;
             }
 
-            if (member is Type type)
-                return PreviouslyGeneratedNames[type] = type.Name();
-
             if (member is FieldInfo field)
-                return PreviouslyGeneratedNames[field] = field.IsInitOnly ? $"read-only {(field.IsStatic ? "static " : "")}field {field.FieldType.FullName} {field.DeclaringType.FullName}.{field.Name}" : $"{(field.IsStatic ? "static " : "")}field {field.FieldType.FullName} {field.DeclaringType.FullName}.{field.Name}";
+                return _previouslyGeneratedNames[field] = field.IsInitOnly ? $"read-only {(field.IsStatic ? "static " : "")}field {field.FieldType.FullName} {field.DeclaringType.FullName}.{field.Name}" : $"{(field.IsStatic ? "static " : "")}field {field.FieldType.FullName} {field.DeclaringType.FullName}.{field.Name}";
 
             if (member is PropertyInfo property)
             {
@@ -107,14 +105,14 @@ namespace Common.Extensions
 
                 str += $" property {property.PropertyType.FullName} {property.DeclaringType.FullName}.{property.Name}";
 
-                return PreviouslyGeneratedNames[property] = str;
+                return _previouslyGeneratedNames[property] = str;
             }
 
             if (member is EventInfo eventInfo)
-                return PreviouslyGeneratedNames[eventInfo] = $"event {eventInfo.EventHandlerType.FullName} {eventInfo.DeclaringType.FullName}.{eventInfo.Name}";
+                return _previouslyGeneratedNames[eventInfo] = $"event {eventInfo.EventHandlerType.FullName} {eventInfo.DeclaringType.FullName}.{eventInfo.Name}";
 
             if (member is ConstructorInfo constructor)
-                return PreviouslyGeneratedNames[constructor] = $"{(constructor.IsPublic ? "public " : "private ")}constructor {constructor.DeclaringType.FullName}({string.Join(", ", constructor.GetParameters().Select(p => $"{p.ParameterType.FullName} {p.Name}"))})";
+                return _previouslyGeneratedNames[constructor] = $"{(constructor.IsPublic ? "public " : "private ")}constructor {constructor.DeclaringType.FullName}({string.Join(", ", constructor.GetParameters().Select(p => $"{p.ParameterType.FullName} {p.Name}"))})";
 
             return null;
         }

@@ -1,4 +1,6 @@
-﻿namespace Common.Extensions
+﻿using System;
+
+namespace Common.Extensions
 {
     public static class ObjectExtensions
     {
@@ -26,6 +28,12 @@
 
             castValue = default;
             return false;
+        }
+
+        public static void IfCast<T>(this object value, Action<T> action)
+        {
+            if (TryTypeCast<T>(value, out var castValue))
+                action.Call(castValue);
         }
 
         public static bool IsType<T>(this object value)

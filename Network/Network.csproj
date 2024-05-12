@@ -1,0 +1,110 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProjectGuid>{C669F118-7024-45CE-8933-553378A58C96}</ProjectGuid>
+    <OutputType>Library</OutputType>
+    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <RootNamespace>Network</RootNamespace>
+    <AssemblyName>Network</AssemblyName>
+    <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
+    <FileAlignment>512</FileAlignment>
+    <LangVersion>preview</LangVersion>
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Xml.Linq" />
+    <Reference Include="System.Data.DataSetExtensions" />
+    <Reference Include="Microsoft.CSharp" />
+    <Reference Include="System.Data" />
+    <Reference Include="System.Net.Http" />
+    <Reference Include="System.Xml" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Authentification\AuthentificationData.cs" />
+    <Compile Include="Authentification\AuthentificationFailureReason.cs" />
+    <Compile Include="Authentification\AuthentificationStatus.cs" />
+    <Compile Include="Authentification\IAuthentification.cs" />
+    <Compile Include="Authentification\IAuthentificationData.cs" />
+    <Compile Include="Authentification\IAuthentificationStorage.cs" />
+    <Compile Include="Authentification\KeyAuthentification.cs" />
+    <Compile Include="Blocking\BlockMode.cs" />
+    <Compile Include="Blocking\IBlock.cs" />
+    <Compile Include="Bridges\IBridge.cs" />
+    <Compile Include="Callbacks\AsyncNetworkCallback.cs" />
+    <Compile Include="Callbacks\INetworkCallbackManager.cs" />
+    <Compile Include="Callbacks\NetworkCallbackManager.cs" />
+    <Compile Include="Controllers\Client\ClientController.cs" />
+    <Compile Include="Controllers\ControllerType.cs" />
+    <Compile Include="Controllers\INetworkController.cs" />
+    <Compile Include="Controllers\Server\ServerController.cs" />
+    <Compile Include="Controllers\Server\ServerPeer.cs" />
+    <Compile Include="Data\DataManager.cs" />
+    <Compile Include="Data\DataManagerSettings.cs" />
+    <Compile Include="Data\DataMode.cs" />
+    <Compile Include="Data\DataPack.cs" />
+    <Compile Include="Data\IDataManager.cs" />
+    <Compile Include="Data\IDataTarget.cs" />
+    <Compile Include="DisconnectReason.cs" />
+    <Compile Include="Events\BasicEvents.cs" />
+    <Compile Include="Events\INetworkEvents.cs" />
+    <Compile Include="Features\FeatureExtensions.cs" />
+    <Compile Include="Features\INetworkFeature.cs" />
+    <Compile Include="Features\INetworkFeatureManager.cs" />
+    <Compile Include="Features\NetworkFeatureBase.cs" />
+    <Compile Include="Features\NetworkFeatureManager.cs" />
+    <Compile Include="INetworkObject.cs" />
+    <Compile Include="Latency\ILatencyMeter.cs" />
+    <Compile Include="Latency\LatencyData.cs" />
+    <Compile Include="Latency\LatencyMeter.cs" />
+    <Compile Include="Latency\LatencySide.cs" />
+    <Compile Include="Latency\Messages\LatencyRequestMessage.cs" />
+    <Compile Include="Latency\Messages\LatencyResponseMessage.cs" />
+    <Compile Include="Peers\INetworkPeer.cs" />
+    <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Reconnection\IReconnector.cs" />
+    <Compile Include="Reconnection\ReconnectionState.cs" />
+    <Compile Include="Reconnection\Reconnector.cs" />
+    <Compile Include="Requests\IRequest.cs" />
+    <Compile Include="Requests\IRequestManager.cs" />
+    <Compile Include="Requests\IResponse.cs" />
+    <Compile Include="Requests\RequestBase.cs" />
+    <Compile Include="Requests\RequestManager.cs" />
+    <Compile Include="Requests\ResponseBase.cs" />
+    <Compile Include="Targets\INetworkTarget.cs" />
+    <Compile Include="Targets\Ip\IPTarget.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="Authentification\Messages\" />
+    <Folder Include="Authentification\Storage\" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Common\Common.csproj">
+      <Project>{0dcb7d50-8f0e-4569-b68c-4b32ad904469}</Project>
+      <Name>Common</Name>
+    </ProjectReference>
+  </ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+</Project>

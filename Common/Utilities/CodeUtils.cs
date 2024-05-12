@@ -216,11 +216,11 @@ namespace Common.Utilities
             return value;
         }
 
-        public static MethodBase ResolveCaller()
+        public static MethodBase ResolveCaller(int skip = 0)
         {
             var trace = new StackTrace();
             var frames = trace.GetFrames();
-            var frame = frames.Skip(2).FirstOrDefault();
+            var frame = frames.Skip(2 + skip).FirstOrDefault();
 
             if (frame != null)
                 return frame.GetMethod();

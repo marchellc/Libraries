@@ -1,13 +1,8 @@
-﻿using Common.Extensions;
-using Common.IO.Collections;
+﻿using Common.IO.Collections;
 using Common.Logging;
-
-using Fasterflect;
-
-using MonoMod.Utils;
+using Common.Pooling.Pools;
 
 using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 
@@ -15,68 +10,18 @@ namespace Common.Extensions
 {
     public static class TypeExtensions
     {
-        private static readonly LockedDictionary<Type, Dictionary<ushort, MemberInfo>> shortDiscovery = new LockedDictionary<Type, Dictionary<ushort, MemberInfo>>();
-        private static readonly LockedDictionary<Type, Dictionary<int, MemberInfo>> longDiscovery = new LockedDictionary<Type, Dictionary<int, MemberInfo>>();
+        private static readonly LockedDictionary<Type, ConstructorInfo[]> _constructors = new LockedDictionary<Type, ConstructorInfo[]>();
+        private static readonly LockedDictionary<Type, Type[]> _implements = new LockedDictionary<Type, Type[]>();
+
+        private static readonly BindingFlags _flags = BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic;
 
         public static readonly LogOutput Log = new LogOutput("Type Extensions").Setup();
 
-        public static Type ToGeneric(this Type type, Type genericType)
-            => type.MakeGenericType(genericType);
+        public static Type ToGeneric(this Type type, params Type[] args)
+            => type.MakeGenericType(args);
 
         public static Type ToGeneric<T>(this Type type)
             => type.MakeGenericType(typeof(T));
-
-        public static MethodInfo Method(this Type type, string name)
-            => Fasterflect.MethodExtensions.Method(type, name, Flags.AllMembers);
-
-        public static MethodInfo Method(this Type type, string name, params Type[] typeArguments)
-            => Fasterflect.MethodExtensions.Method(type, name, typeArguments, Flags.AllMembers);
-
-        public static MethodInfo[] MethodsWithAttribute<T>(this Type type) where T : Attribute
-            => MethodExtensions.GetAllMethods(type).Where(m => m.IsDefined(typeof(T), false)).ToArray();
-
-        public static ConstructorInfo[] GetAllConstructors(this Type type)
-            => type.Constructors(Flags.AllMembers).ToArray();
-
-        public static ConstructorInfo GetEmptyConstructor(this Type type)
-            => type.Constructors(Flags.AllMembers).FirstOrDefault(c => MethodExtensions.Parameters(c).Length <= 0);
-
-        public static ConstructorInfo GetConstructor(this Type type, params Type[] types)
-            => type.Constructor(Flags.AllMembers, types);
-
-        public static object Construct(this Type type, params object[] parameters)
-            => type.CreateInstance(parameters);
-
-        public static T Construct<T>(this Type type, params object[] parameters)
-            => (T)type.CreateInstance(parameters);
-
-        public static T Construct<T>(params object[] parameters)
-        {
-            var value = typeof(T).CreateInstance(parameters);
-
-            if (value is null || value is not T t)
-                return default;
-
-            return t;
-        }
-
-        public static T ConstructSafe<T>(params object[] parameters)
-        {
-            try
-            {
-                var value = typeof(T).CreateInstance(parameters);
-
-                if (value is null || value is not T t)
-                    return default;
-
-                return t;
-            }
-            catch (Exception ex)
-            {
-                Log.Error($"Failed to construct type '{typeof(T).ToName()}' due to an exception:\n{ex}");
-                return default;
-            }
-        }
 
         public static Type GetFirstGenericType(this Type type)
         {
@@ -95,10 +40,39 @@ namespace Common.Extensions
             => type.IsSealed && type.IsAbstract;
 
         public static bool InheritsType<TType>(this Type type)
-            => Fasterflect.TypeExtensions.InheritsOrImplements(type, typeof(TType));
+            => InheritsType(type, typeof(TType));
 
         public static bool InheritsType(this Type type, Type inherit)
-            => Fasterflect.TypeExtensions.InheritsOrImplements(type, inherit);
+        {
+            if (_implements.TryGetValue(type, out var implements))
+                return implements.Contains(inherit);
+
+            var baseType = type.BaseType;
+            var cache = ListPool<Type>.Shared.Rent();
+
+            while (baseType != null)
+            {
+                cache.Add(baseType);
+                baseType = baseType.BaseType;
+            }
+
+            var interfaces = type.GetInterfaces();
+
+            cache.AddRange(interfaces);
+
+            foreach (var interfaceType in interfaces)
+            {
+                baseType = interfaceType.BaseType;
+
+                while (baseType != null && baseType.IsInterface)
+                {
+                    cache.Add(baseType);
+                    baseType = baseType.BaseType;
+                }
+            }
+
+            return (_implements[type] = ListPool<Type>.Shared.ToArrayReturn(cache)).Contains(inherit);
+        }
 
         public static Type ToType(this TypeCode typeCode)
         {
@@ -125,59 +99,10 @@ namespace Common.Extensions
             }
         }
 
-        public static int GetSize(this Type type)
-            => type.GetManagedSize();
-
         public static int GetLongCode(this Type type)
             => type.FullName.GetIntegerCode();
 
         public static ushort GetShortCode(this Type type)
             => type.FullName.GetShortCode();
-
-        public static MemberInfo FindMember(this Type type, ushort shortCode)
-        {
-            if (!shortDiscovery.TryGetValue(type, out var members))
-            {
-                members = new Dictionary<ushort, MemberInfo>();
-
-                shortDiscovery[type] = members;
-
-                foreach (var searchMember in type.GetMembers(MethodExtensions.BindingFlags))
-                {
-                    if (searchMember.ToShortCode() == shortCode)
-                    {
-                        members[shortCode] = searchMember;
-                        return searchMember;
-                    }
-                }
-
-                return null;
-            }
-
-            return members.TryGetValue(shortCode, out var member) ? member : null;
-        }
-
-        public static MemberInfo FindMember(this Type type, int longCode)
-        {
-            if (!longDiscovery.TryGetValue(type, out var members))
-            {
-                members = new Dictionary<int, MemberInfo>();
-
-                longDiscovery[type] = members;
-
-                foreach (var searchMember in type.GetMembers(MethodExtensions.BindingFlags))
-                {
-                    if (searchMember.ToLongCode() == longCode)
-                    {
-                        members[longCode] = searchMember;
-                        return searchMember;
-                    }
-                }
-
-                return null;
-            }
-
-            return members.TryGetValue(longCode, out var member) ? member : null;
-        }
     }
 }

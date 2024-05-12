@@ -1,28 +1,31 @@
 ﻿using Common.Extensions;
+using Common.IO.Collections;
 using Common.Logging;
 using Common.Pooling.Pools;
 using Common.Utilities;
-
-using Fasterflect;
-
-using MonoMod.Utils;
 
 using System;
 using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
 
+using DynamicMethod = Common.Utilities.Dynamic.DynamicMethod;
+
 namespace Common.Extensions
 {
     public static class MethodExtensions
     {
-        public static readonly BindingFlags BindingFlags = BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static | BindingFlags.NonPublic;
+        private static readonly BindingFlags _flags = BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static | BindingFlags.NonPublic;
+
+        private static readonly LockedDictionary<Type, MethodInfo[]> _methods = new LockedDictionary<Type, MethodInfo[]>();
+        private static readonly LockedDictionary<MethodInfo, DynamicMethod> _dynamic = new LockedDictionary<MethodInfo, DynamicMethod>();
+        private static readonly LockedDictionary<MethodBase, ParameterInfo[]> _params = new LockedDictionary<MethodBase, ParameterInfo[]>();
+
         public static readonly LogOutput Log = new LogOutput("Method Extensions").Setup();
 
         public static readonly OpCode[] OneByteCodes;
         public static readonly OpCode[] TwoByteCodes;
 
-        public static bool DisableFastInvoker => DelegateExtensions.DisableFastInvoker;
         public static bool EnableLogging;
 
         static MethodExtensions()
@@ -35,7 +38,7 @@ namespace Common.Extensions
                 if (!field.IsStatic || field.FieldType != typeof(OpCode))
                     continue;
 
-                var opCode = field.GetValueFast<OpCode>();
+                var opCode = field.Get<OpCode>();
 
                 if (opCode.OpCodeType is OpCodeType.Nternal)
                     continue;
@@ -47,19 +50,38 @@ namespace Common.Extensions
             }
         }
 
-        public static MethodInfo ToGeneric(this MethodInfo method, Type genericType)
-            => method.MakeGenericMethod(genericType);
+        public static MethodInfo ToGeneric(this MethodInfo method, params Type[] args)
+            => method.MakeGenericMethod(args);
 
         public static MethodInfo ToGeneric<T>(this MethodInfo method)
             => method.ToGeneric(typeof(T));
 
         public static MethodInfo[] GetAllMethods(this Type type)
-            => type.Methods(Flags.AllMembers).ToArray();
+        {
+            if (_methods.TryGetValue(type, out var methods))
+                return methods;
+
+            return _methods[type] = type.GetMethods(_flags);
+        }
 
         public static ParameterInfo[] Parameters(this MethodBase method)
-            => MethodInfoExtensions.Parameters(method).ToArray();
+        {
+            if (_params.TryGetValue(method, out var parameters))
+                return parameters;
 
-        public static bool TryCreateDelegate<TDelegate>(this MethodBase method, object target, out TDelegate del) where TDelegate : Delegate
+            return _params[method] = method.GetParameters();
+        }
+
+        public static MethodInfo Method(this Type type, string name, bool ignoreCase = false)
+            => GetAllMethods(type).FirstOrDefault(m => ignoreCase ? m.Name.ToLower() == name.ToLower() : m.Name == name);
+
+        public static MethodInfo Method(this Type type, string name, bool ignoreCase, params Type[] typeArguments)
+            => GetAllMethods(type).FirstOrDefault(m => (ignoreCase ? m.Name.ToLower() == name.ToLower() : m.Name == name) && m.Parameters().Select(p => p.ParameterType).IsMatch(typeArguments));
+
+        public static MethodInfo[] MethodsWithAttribute<T>(this Type type) where T : Attribute
+            => GetAllMethods(type).Where(m => m.IsDefined(typeof(T), true)).ToArray();
+
+        public static bool TryCreateDelegate<TDelegate>(this MethodInfo method, object target, out TDelegate del) where TDelegate : Delegate
         {
             if (method is null)
                 throw new ArgumentNullException(nameof(method));
@@ -69,8 +91,7 @@ namespace Common.Extensions
 
             try
             {
-                del = method.CreateDelegate(typeof(TDelegate), target) as TDelegate;
-
+                del = Delegate.CreateDelegate(typeof(TDelegate), target, method) as TDelegate;
                 return del != null;
             }
             catch (Exception ex)
@@ -82,7 +103,7 @@ namespace Common.Extensions
             }
         }
 
-        public static bool TryCreateDelegate(this MethodBase method, Type delegateType, out Delegate del)
+        public static bool TryCreateDelegate(this MethodInfo method, Type delegateType, out Delegate del)
         {
             if (method is null)
                 throw new ArgumentNullException(nameof(method));
@@ -92,8 +113,7 @@ namespace Common.Extensions
 
             try
             {
-                del = method.CreateDelegate(delegateType);
-
+                del = Delegate.CreateDelegate(delegateType, method);
                 return del != null;
             }
             catch (Exception ex)
@@ -105,7 +125,7 @@ namespace Common.Extensions
             }
         }
 
-        public static bool TryCreateDelegate(this MethodBase method, object target, Type delegateType, out Delegate del)
+        public static bool TryCreateDelegate(this MethodInfo method, object target, Type delegateType, out Delegate del)
         {
             if (method is null)
                 throw new ArgumentNullException(nameof(method));
@@ -115,8 +135,7 @@ namespace Common.Extensions
 
             try
             {
-                del = method.CreateDelegate(delegateType, target);
-
+                del = Delegate.CreateDelegate(delegateType, target, method);
                 return del != null;
             }
             catch (Exception ex)
@@ -128,7 +147,7 @@ namespace Common.Extensions
             }
         }
 
-        public static bool TryCreateDelegate<TDelegate>(this MethodBase method, out TDelegate del) where TDelegate : Delegate
+        public static bool TryCreateDelegate<TDelegate>(this MethodInfo method, out TDelegate del) where TDelegate : Delegate
         {
             if (method is null)
                 throw new ArgumentNullException(nameof(method));
@@ -138,7 +157,7 @@ namespace Common.Extensions
 
             try
             {
-                del = method.CreateDelegate(typeof(TDelegate)) as TDelegate;
+                del = Delegate.CreateDelegate(typeof(TDelegate), method) as TDelegate;
                 return del != null;
             }
             catch (Exception ex)
@@ -150,56 +169,69 @@ namespace Common.Extensions
             }
         }
 
-        public static object Call(this MethodBase method, object instance, params object[] args)
-        {
-            if (EnableLogging)
-                Log.Info($"Executing method: {method.ToName()} with instance '{instance?.GetType().FullName ?? "null"}' and {args.Length} args");
+        public static object Call(this MethodInfo method, params object[] args)
+            => InternalCall(method, null, args);
 
-            return Call(method, instance, Log.Error, args);
-        }
+        public static object Call(this MethodInfo method, object target, params object[] args)
+            => InternalCall(method, target, args);
 
-        public static object Call(this MethodBase method, object instance, Action<Exception> errorCallback, params object[] args)
+        public static T Call<T>(this MethodInfo method, params object[] args)
+            => (T)InternalCall(method, null, args);
+
+        public static T Call<T>(this MethodInfo method, object target, params object[] args)
+            => (T)InternalCall(method, target, args);
+
+        public static object TryCall(this MethodInfo method, params object[] args)
         {
             try
             {
-                if (EnableLogging)
-                    Log.Info($"Executing method: {method.ToName()} with instance '{instance?.GetType().FullName ?? "null"}' and {args.Length} args");
-
-                if (method is MethodInfo info && !DisableFastInvoker)
-                {
-                    var invoker = HarmonyLib.MethodInvoker.GetHandler(info);
-
-                    if (invoker != null)
-                        return invoker(instance, args);
-                }
-
-                return method.Invoke(instance, args);
+                return InternalCall(method, null, args);
             }
             catch (Exception ex)
             {
-                errorCallback.Call(ex);
+                Log.Error($"An exception occured while calling method '{method.ToName()}':\n{ex}");
                 return null;
             }
         }
 
-        public static object CallUnsafe(this MethodBase method, object instance, params object[] args)
+        public static object TryCall(this MethodInfo method, object target, params object[] args)
         {
-            if (EnableLogging)
-                Log.Info($"Executing method UNSAFE: {method.ToName()} with instance '{instance?.GetType().FullName ?? "null"}' and {args.Length} args");
-
-            if (method is MethodInfo info && !DisableFastInvoker)
+            try
             {
-                var invoker = HarmonyLib.MethodInvoker.GetHandler(info);
-
-                if (invoker != null)
-                    return invoker(instance, args);
+                return InternalCall(method, target, args);
             }
-
-            return method.Invoke(instance, args);
+            catch (Exception ex)
+            {
+                Log.Error($"An exception occured while calling method '{method.ToName()}':\n{ex}");
+                return null;
+            }
         }
 
-        public static MethodInfo CloneToMemory(this MethodBase target)
-            => new DynamicMethodDefinition(target).Generate();
+        public static T TryCall<T>(this MethodInfo method, params object[] args)
+        {
+            try
+            {
+                return (T)InternalCall(method, null, args);
+            }
+            catch (Exception ex)
+            {
+                Log.Error($"An exception occured while calling method '{method.ToName()}':\n{ex}");
+                return default;
+            }
+        }
+
+        public static T TryCall<T>(this MethodInfo method, object target, params object[] args)
+        {
+            try
+            {
+                return (T)InternalCall(method, target, args);
+            }
+            catch (Exception ex)
+            {
+                Log.Error($"An exception occured while calling method '{method.ToName()}':\n{ex}");
+                return default;
+            }
+        }
 
         public static MethodBase[] GetMethodCalls(this MethodBase method)
             => GetInstructions(method).Where(i => i.Operand != null && i.Operand is MethodBase)
@@ -289,7 +321,7 @@ namespace Common.Extensions
 
                             for (int j = 0; j < length; j++)
                                 branches[j] = buffer.Position + offsets[j];
-  
+
                             instruction.Operand = branches;
                             break;
                         }
@@ -317,7 +349,7 @@ namespace Common.Extensions
                                 instruction.Operand = (sbyte)buffer.ReadByte();
                             else
                                 instruction.Operand = buffer.ReadByte();
- 
+
                             break;
                         }
 
@@ -364,6 +396,20 @@ namespace Common.Extensions
             }
 
             return ListPool<Instruction>.Shared.ToArrayReturn(instructions);
+        }
+
+        private static object InternalCall(MethodInfo method, object target, object[] args)
+        {
+            if (EnableLogging)
+                Log.Verbose($"Calling method '{method.ToName()}' (args={args.Length} target={target?.GetType().FullName ?? "null"}");
+
+            if (!_dynamic.TryGetValue(method, out var dynamicMethod))
+                dynamicMethod = _dynamic[method] = DynamicMethod.Create(method);
+
+            if (method.IsStatic)
+                return dynamicMethod.InvokeStatic(args);
+            else
+                return dynamicMethod.Invoke(target, args);
         }
     }
 }

@@ -10,8 +10,6 @@ namespace Common.Extensions
 {
     public static class StringExtensions
     {
-        public static readonly char[] MultiLine = ['\r', '\n', '\x85', '\x2028', '\x2029'];
-
         public static bool TryPeekIndex(this string str, int index, out char value)
         {
             if (index >= str.Length)
@@ -312,9 +310,6 @@ namespace Common.Extensions
 
             return GetBeforeIndex(str, index);
         }
-
-        public static string[] SplitByLine(this string str)
-            => str.Split(MultiLine);
 
         public static string SnakeCase(this string str)
         {

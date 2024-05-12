@@ -37,11 +37,8 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="0Harmony, Version=2.2.2.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\packages\Lib.Harmony.2.2.2\lib\net48\0Harmony.dll</HintPath>
-    </Reference>
-    <Reference Include="Fasterflect, Version=3.0.0.0, Culture=neutral, PublicKeyToken=38d18473284c1ca7, processorArchitecture=MSIL">
-      <HintPath>..\packages\fasterflect.3.0.0\lib\netstandard20\netstandard20\Fasterflect.dll</HintPath>
+    <Reference Include="0Harmony, Version=2.3.3.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\packages\Lib.Harmony.2.3.3\lib\net48\0Harmony.dll</HintPath>
     </Reference>
     <Reference Include="libc.hwid, Version=6.0.2.0, Culture=neutral, processorArchitecture=MSIL">
       <HintPath>..\packages\libc.hwid.6.0.2\lib\netstandard2.0\libc.hwid.dll</HintPath>
@@ -151,8 +148,8 @@
       <Private>True</Private>
       <Private>True</Private>
     </Reference>
-    <Reference Include="System.Security.AccessControl, Version=5.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
-      <HintPath>..\packages\System.Security.AccessControl.5.0.0\lib\net461\System.Security.AccessControl.dll</HintPath>
+    <Reference Include="System.Security.AccessControl, Version=6.0.0.1, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
+      <HintPath>..\packages\System.Security.AccessControl.6.0.1\lib\net461\System.Security.AccessControl.dll</HintPath>
     </Reference>
     <Reference Include="System.Security.Cryptography.Algorithms, Version=4.2.1.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
       <HintPath>..\packages\System.Security.Cryptography.Algorithms.4.3.1\lib\net463\System.Security.Cryptography.Algorithms.dll</HintPath>
@@ -177,14 +174,14 @@
     <Reference Include="System.Security.Principal.Windows, Version=5.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
       <HintPath>..\packages\System.Security.Principal.Windows.5.0.0\lib\net461\System.Security.Principal.Windows.dll</HintPath>
     </Reference>
-    <Reference Include="System.Text.Encoding.CodePages, Version=5.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
-      <HintPath>..\packages\System.Text.Encoding.CodePages.5.0.0\lib\net461\System.Text.Encoding.CodePages.dll</HintPath>
+    <Reference Include="System.Text.Encoding.CodePages, Version=8.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
+      <HintPath>..\packages\System.Text.Encoding.CodePages.8.0.0\lib\net462\System.Text.Encoding.CodePages.dll</HintPath>
     </Reference>
     <Reference Include="System.Text.Encodings.Web, Version=8.0.0.0, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
       <HintPath>..\packages\System.Text.Encodings.Web.8.0.0\lib\net462\System.Text.Encodings.Web.dll</HintPath>
     </Reference>
-    <Reference Include="System.Text.Json, Version=8.0.0.1, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
-      <HintPath>..\packages\System.Text.Json.8.0.1\lib\net462\System.Text.Json.dll</HintPath>
+    <Reference Include="System.Text.Json, Version=8.0.0.3, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
+      <HintPath>..\packages\System.Text.Json.8.0.3\lib\net462\System.Text.Json.dll</HintPath>
     </Reference>
     <Reference Include="System.Text.RegularExpressions, Version=4.1.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
       <HintPath>..\packages\System.Text.RegularExpressions.4.3.1\lib\net463\System.Text.RegularExpressions.dll</HintPath>
@@ -212,7 +209,10 @@
     <Compile Include="Caching\FileCache.cs" />
     <Compile Include="Caching\ICache.cs" />
     <Compile Include="Caching\MemoryCache.cs" />
+    <Compile Include="Configs\ConfigAttribute.cs" />
+    <Compile Include="Configs\ConfigFile.cs" />
     <Compile Include="Extensions\CachingExtensions.cs" />
+    <Compile Include="Extensions\ConstructorExtensions.cs" />
     <Compile Include="Extensions\ObjectExtensions.cs" />
     <Compile Include="Extensions\StackExtensions.cs" />
     <Compile Include="Extensions\StringBuilderExtensions.cs" />
@@ -231,8 +231,10 @@
     <Compile Include="IO\Data\FileData.cs" />
     <Compile Include="IO\Data\IData.cs" />
     <Compile Include="IO\Data\DataReaderLoader.cs" />
+    <Compile Include="IO\DirectoryWatcher.cs" />
     <Compile Include="IO\FileLockUtils.cs" />
     <Compile Include="IO\FileWatcher.cs" />
+    <Compile Include="Logging\Logger.cs" />
     <Compile Include="Patching\PatchAttribute.cs" />
     <Compile Include="Patching\PatchInfo.cs" />
     <Compile Include="Patching\PatchManager.cs" />
@@ -243,11 +245,6 @@
     <Compile Include="Utilities\ByteBuffer.cs" />
     <Compile Include="Utilities\CodeUtils.cs" />
     <Compile Include="Utilities\ConsoleArgs.cs" />
-    <Compile Include="Attributes\AttributeCache.cs" />
-    <Compile Include="Attributes\AttributeCollector.cs" />
-    <Compile Include="Attributes\AttributeResolver.cs" />
-    <Compile Include="Attributes\Custom\InitAttribute.cs" />
-    <Compile Include="Attributes\Custom\UnloadAttribute.cs" />
     <Compile Include="Utilities\ConsoleCommands.cs" />
     <Compile Include="Extensions\ArrayExtensions.cs" />
     <Compile Include="Extensions\AssemblyExtensions.cs" />
@@ -268,19 +265,19 @@
     <Compile Include="Extensions\TaskExtensions.cs" />
     <Compile Include="Extensions\TypeExtensions.cs" />
     <Compile Include="Utilities\Chance.cs" />
+    <Compile Include="Utilities\Dynamic\DynamicConstructor.cs" />
+    <Compile Include="Utilities\Dynamic\DynamicField.cs" />
+    <Compile Include="Utilities\Dynamic\DynamicMethod.cs" />
+    <Compile Include="Utilities\Dynamic\DynamicProperty.cs" />
     <Compile Include="Utilities\FastByteConverter.cs" />
     <Compile Include="Utilities\Generation\BasicGenerator.cs" />
-    <Compile Include="Extensions\ReaderExtensions.cs" />
-    <Compile Include="Extensions\WriterExtensions.cs" />
     <Compile Include="IO\Collections\LockedDictionary.cs" />
     <Compile Include="IO\Directory.cs" />
     <Compile Include="IO\File.cs" />
     <Compile Include="ModuleInitializer.cs" />
     <Compile Include="IO\Collections\LockedList.cs" />
     <Compile Include="Logging\Console\ConsoleLogger.cs" />
-    <Compile Include="Logging\Console\ConsoleLoggerExtensions.cs" />
     <Compile Include="Logging\File\FileLogger.cs" />
-    <Compile Include="Logging\File\FileLoggerExtensions.cs" />
     <Compile Include="Logging\ILogger.cs" />
     <Compile Include="Logging\LogCharacter.cs" />
     <Compile Include="Logging\LogEvents.cs" />
@@ -298,7 +295,6 @@
     <Compile Include="Results\Error.cs" />
     <Compile Include="Results\IResult.cs" />
     <Compile Include="Results\Success.cs" />
-    <Compile Include="Utilities\Assert.cs" />
     <Compile Include="Utilities\Disposable.cs" />
     <Compile Include="Utilities\Exceptions\ExceptionManager.cs" />
     <Compile Include="Utilities\Exceptions\ExceptionSettings.cs" />
@@ -310,9 +306,15 @@
     <Compile Include="Utilities\Generation\UniqueStringGenerator.cs" />
     <Compile Include="Utilities\Generator.cs" />
     <Compile Include="Utilities\HardwareId.cs" />
+    <Compile Include="Utilities\ILGeneratorHelper.cs" />
     <Compile Include="Utilities\IndexUtils.cs" />
     <Compile Include="Utilities\Instruction.cs" />
     <Compile Include="Utilities\JsonUtils.cs" />
+    <Compile Include="Utilities\MathUtils.cs" />
+    <Compile Include="Utilities\NetworkDiagnostics.cs" />
+    <Compile Include="Utilities\PingFlags.cs" />
+    <Compile Include="Utilities\PingHit.cs" />
+    <Compile Include="Utilities\PingResult.cs" />
     <Compile Include="Utilities\RegexUtils.cs" />
     <Compile Include="Utilities\ServiceCollection.cs" />
     <Compile Include="Utilities\Threading\IThreadManager.cs" />
@@ -329,6 +331,7 @@
     <Compile Include="Values\OptionalValue.cs" />
     <Compile Include="Values\RecordedValue.cs" />
     <Compile Include="Values\ReferenceValue.cs" />
+    <Compile Include="Values\StatisticValue.cs" />
     <Compile Include="Values\StatusValue.cs" />
     <Compile Include="Values\WeakValue.cs" />
   </ItemGroup>

@@ -1,9 +1,6 @@
-﻿using Common.Logging.File;
-using Common.Logging.Console;
+﻿using Common.Logging.Console;
 
 using System;
-using System.IO;
-using System.Runtime.InteropServices;
 
 using Common.Extensions;
 
@@ -11,38 +8,10 @@ namespace Common.Logging
 {
     public static class LogUtils
     {
-        private static bool consChecked;
-        private static bool consAvailable;
-
-        [DllImport("kernel32.dll")]
-        static extern IntPtr GetConsoleWindow();
-
         public const LogLevel General = LogLevel.Information | LogLevel.Warning | LogLevel.Error | LogLevel.Fatal;
         public const LogLevel Debug = LogLevel.Debug | LogLevel.Trace | LogLevel.Verbose;
 
         public static LogLevel Default;
-
-        public static bool IsConsoleAvailable
-        {
-            get
-            {
-                if (Environment.OSVersion.Platform != PlatformID.Win32NT)
-                    return true;
-
-                if (consChecked)
-                    return consAvailable;
-
-                consChecked = true;
-
-                try
-                {
-                    consAvailable = GetConsoleWindow() != IntPtr.Zero;
-                }
-                catch { }
-
-                return consAvailable;
-            }
-        }
 
         public static string Time
         {
@@ -53,16 +22,7 @@ namespace Common.Logging
             }
         }
 
-        public static string TimeFileName
-        {
-            get
-            {
-                var time = DateTime.Now;
-                return $"{time.Day}_{time.Month}_{time.Year}_{time.Hour}_{time.Minute}_{time.Ticks}";
-            }
-        }
-
-        public static LogOutput Setup(this LogOutput output, bool includeFile = true)
+        public static LogOutput Setup(this LogOutput output)
         {
             if (LogOutput.Common != null)
             {
@@ -70,21 +30,11 @@ namespace Common.Logging
 
                 for (int i = 0; i < loggers.Length; i++)
                 {
-                    if (loggers[i] is FileLogger)
-                    {
-                        if (includeFile)
-                            output.AddLogger(loggers[i]);
-                        else
-                            continue;
-                    }
+                    if (loggers[i] is ConsoleLogger)
+                        continue;
 
                     output.AddLogger(loggers[i]);
                 }
-            }
-            else
-            {
-                if (IsConsoleAvailable)
-                    output.AddLogger(ConsoleLogger.Instance);
             }
 
             return output;
@@ -106,22 +56,6 @@ namespace Common.Logging
 
             output.Enabled = output.Enabled.Remove(level);
             return output;
-        }
-
-        public static string GetFilePath(string fileNamePrefix)
-        {
-            var appDataDir = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-            var genLogDir = $"{appDataDir}/Common Library Logs";
-
-            if (!Directory.Exists(genLogDir))
-                Directory.CreateDirectory(genLogDir);
-
-            var logDir = $"{genLogDir}/{ModuleInitializer.GetAppName()}";
-
-            if (!Directory.Exists(logDir))
-                Directory.CreateDirectory(logDir);
-
-            return $"{logDir}/{fileNamePrefix}-{TimeFileName}.txt";
         }
 
         public static LogMessage CreateMessage(string source, string message, LogLevel level)
@@ -277,7 +211,7 @@ namespace Common.Logging
             {
                 case LogLevel.Fatal:
                     return ConsoleColor.Red;
-                
+
                 case LogLevel.Error:
                     return ConsoleColor.DarkRed;
 

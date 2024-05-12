@@ -1,26 +1,44 @@
-﻿using System;
+﻿using Common.Pooling.Pools;
+
+using System;
 using System.Collections.Generic;
 
 namespace Common.Extensions
 {
     public static class EnumExtensions
     {
-        private static readonly Dictionary<Type, Enum[]> enumValuesCache = new Dictionary<Type, Enum[]>();
+        private static readonly Dictionary<Type, Enum[]> _enumValuesCache = new Dictionary<Type, Enum[]>();
 
-        public static TEnum[] GetValues<TEnum>() where TEnum : Enum
+        public static TEnum[] GetFlags<TEnum>(this TEnum en) where TEnum : struct, Enum
         {
-            if (enumValuesCache.TryGetValue(typeof(TEnum), out var values))
+            var values = GetValues<TEnum>();
+            var cache = ListPool<TEnum>.Shared.Rent();
+
+            foreach (var value in values)
+            {
+                if (!Any(en, value))
+                    continue;
+
+                cache.Add(value);
+            }
+
+            return ListPool<TEnum>.Shared.ToArrayReturn(cache);
+        }
+
+        public static TEnum[] GetValues<TEnum>() where TEnum : struct, Enum
+        {
+            if (_enumValuesCache.TryGetValue(typeof(TEnum), out var values))
                 return values.CastArray<TEnum>();
             else
             {
                 values = Enum.GetValues(typeof(TEnum)).CastArray<Enum>();
-                enumValuesCache[typeof(TEnum)] = values;
+                _enumValuesCache[typeof(TEnum)] = values;
                 return values.CastArray<TEnum>();
             }
         }
 
         public static Enum[] GetValues(Type type)
-            => enumValuesCache.TryGetValue(type, out var values) ? values : enumValuesCache[type] = Enum.GetValues(type).CastArray<Enum>();
+            => _enumValuesCache.TryGetValue(type, out var values) ? values : _enumValuesCache[type] = Enum.GetValues(type).CastArray<Enum>();
 
         public static bool Any<TEnum>(this TEnum target, TEnum value) where TEnum : struct, Enum
         {
@@ -28,17 +46,6 @@ namespace Common.Extensions
 
             switch (typeCode)
             {
-                case TypeCode.Boolean:
-                case TypeCode.Object:
-                case TypeCode.Char:
-                case TypeCode.DateTime:
-                case TypeCode.DBNull:
-                case TypeCode.Empty:
-                case TypeCode.String:
-                case TypeCode.Decimal:
-                case TypeCode.Single:
-                    throw new ArgumentException($"Enum '{typeof(TEnum).FullName}' has an invalid type code.");
-
                 case TypeCode.Byte: return HasByte(target, value);
 
                 case TypeCode.Int16: return HasInt16(target, value);
@@ -60,17 +67,6 @@ namespace Common.Extensions
 
             switch (typeCode)
             {
-                case TypeCode.Boolean:
-                case TypeCode.Object:
-                case TypeCode.Char:
-                case TypeCode.DateTime:
-                case TypeCode.DBNull:
-                case TypeCode.Empty:
-                case TypeCode.String:
-                case TypeCode.Decimal:
-                case TypeCode.Single:
-                    throw new ArgumentException($"Enum '{typeof(TEnum).FullName}' has an invalid type code.");
-
                 case TypeCode.Byte: return (TEnum)OperateBytes(target, flag, EnumOperation.Remove);
 
                 case TypeCode.Int16: return (TEnum)OperateInt16(target, flag, EnumOperation.Remove);
@@ -92,17 +88,6 @@ namespace Common.Extensions
 
             switch (typeCode)
             {
-                case TypeCode.Boolean:
-                case TypeCode.Object:
-                case TypeCode.Char:
-                case TypeCode.DateTime:
-                case TypeCode.DBNull:
-                case TypeCode.Empty:
-                case TypeCode.String:
-                case TypeCode.Decimal:
-                case TypeCode.Single:
-                    throw new ArgumentException($"Enum '{typeof(TEnum).FullName}' has an invalid type code.");
-
                 case TypeCode.Byte: return (TEnum)OperateBytes(target, flag);
 
                 case TypeCode.Int16: return (TEnum)OperateInt16(target, flag);

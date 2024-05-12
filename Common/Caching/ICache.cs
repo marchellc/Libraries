@@ -9,8 +9,8 @@ namespace Common.Caching
 
         T Find(Func<T, bool> predicate);
 
-        T[] FindAll(Func<T, bool> predicate);
-        T[] GetAll();
+        IEnumerable<T> FindAll(Func<T, bool> predicate);
+        IEnumerable<T> GetAll();
 
         bool TryFind(Func<T, bool> predicate, out T value);
 

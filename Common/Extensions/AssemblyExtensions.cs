@@ -1,6 +1,5 @@
-﻿using Common.Logging;
-
-using Fasterflect;
+﻿using Common.IO.Collections;
+using Common.Logging;
 
 using System;
 using System.Collections.Generic;
@@ -11,6 +10,9 @@ namespace Common.Extensions
 {
     public static class AssemblyExtensions
     {
+        private static readonly LockedDictionary<Assembly, List<Type>> _types = new LockedDictionary<Assembly, List<Type>>();
+        private static readonly LockedDictionary<Assembly, List<MethodInfo>> _methods = new LockedDictionary<Assembly, List<MethodInfo>>();
+
         public static Func<Assembly, byte[]> RawBytesMethod { get; }
         public static Type RuntimeAssemblyType { get; }
 
@@ -18,54 +20,71 @@ namespace Common.Extensions
         {
             RuntimeAssemblyType = Type.GetType("System.Reflection.RuntimeAssembly");
 
+            if (RuntimeAssemblyType is null)
+            {
+                LogOutput.Common.Warn($"Type 'System.Reflection.RuntimeAssembly' is not present in this runtime!");
+                return;
+            }
+
             var runtimeAssemblyMethod = RuntimeAssemblyType.GetAllMethods().FirstOrDefault(m => m.Name == "GetRawBytes" && m.ReturnType == typeof(byte[]) && m.Parameters().Length == 0);
 
             if (runtimeAssemblyMethod is null)
             {
-                LogOutput.Common.Warn($"RuntimeAssembly.GetRawBytes does not exist in this runtime!");
+                LogOutput.Common.Warn($"RuntimeAssembly.GetRawBytes method does not exist in this runtime!");
                 return;
             }
 
-            var runtimeMethodInvoker = HarmonyLib.MethodInvoker.GetHandler(runtimeAssemblyMethod);
-
-            RawBytesMethod = assembly => (byte[])runtimeMethodInvoker(assembly);
+            RawBytesMethod = assembly => (byte[])runtimeAssemblyMethod.Invoke(assembly, null);
         }
 
-        public static Type[] Types(this Assembly assembly, params string[] filter)
-            => Fasterflect.AssemblyExtensions.Types(assembly, Flags.AllMembers, filter).ToArray();
-
         public static Type[] Types<T>(this Assembly assembly)
-            => Fasterflect.AssemblyExtensions.TypesImplementing<T>(assembly).ToArray();
+        {
+            if (!_types.TryGetValue(assembly, out var types))
+                types = _types[assembly] = assembly.GetTypes().ToList();
+
+            return types.WhereArray(t => t.InheritsType<T>());
+        }
 
         public static Type[] TypesWithAttribute<T>(this Assembly assembly) where T : Attribute
-            => Fasterflect.AssemblyExtensions.TypesWith<T>(assembly).ToArray();
+        {
+            if (!_types.TryGetValue(assembly, out var types))
+                types = _types[assembly] = assembly.GetTypes().ToList();
+
+            return types.WhereArray(t => t.HasAttribute<T>());
+        }
 
         public static byte[] GetRawBytes(this Assembly assembly)
         {
             if (RawBytesMethod is null)
-                return Array.Empty<byte>();
+                throw new InvalidOperationException($"GetRawBytes method is not supported in this runtime!");
 
             return RawBytesMethod(assembly);
         }
 
         public static MethodInfo[] Methods(this Assembly assembly)
         {
-            var list = new List<MethodInfo>();
+            if (_methods.TryGetValue(assembly, out var methods))
+                return methods.ToArray();
 
-            foreach (var type in assembly.Types())
-                list.AddRange(type.Methods());
+            methods = new List<MethodInfo>();
 
-            return list.ToArray();
+            foreach (var type in assembly.GetTypes())
+                methods.AddRange(type.GetAllMethods());
+
+            return (_methods[assembly] = methods).ToArray();
         }
 
         public static MethodInfo[] MethodsWithAttribute<T>(this Assembly assembly) where T : Attribute
         {
-            var list = new List<MethodInfo>();
+            if (_methods.TryGetValue(assembly, out var methods))
+                return methods.WhereArray(m => m.HasAttribute<T>());
 
-            foreach (var type in assembly.Types())
-                list.AddRange(type.MethodsWithAttribute<T>());
+            methods = new List<MethodInfo>();
 
-            return list.ToArray();
+            foreach (var type in assembly.GetTypes())
+                methods.AddRange(type.GetAllMethods());
+
+            return (_methods[assembly] = methods).WhereArray(m => m.HasAttribute<T>());
         }
     }
 }

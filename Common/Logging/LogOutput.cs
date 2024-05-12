@@ -1,7 +1,6 @@
 ﻿using Common.Extensions;
 using Common.IO.Collections;
 using Common.Logging.Console;
-using Common.Logging.File;
 using Common.Utilities;
 
 using System;
@@ -18,12 +17,15 @@ namespace Common.Logging
         private string source = "";
         private List<ILogger> loggers = new List<ILogger>();
 
-        public static LogOutput Common { get; private set; } 
+        public static LogOutput Common { get; private set; }
 
         public static LogOutput[] Outputs
         {
             get => allOutputs.ToArray();
         }
+
+        public static List<ILogger> DefaultLoggers { get; } = new List<ILogger>();
+        public static List<Type> DefaultLoggerTypes { get; } = new List<Type>();
 
         public LogOutput(string source = null)
         {
@@ -33,7 +35,13 @@ namespace Common.Logging
             Enabled = LogUtils.Default;
             allOutputs.Add(this);
 
-            Raw($"Created a new logger '{Name}' (level: {Enabled})", ConsoleColor.Cyan);
+            loggers.Add(ConsoleLogger.Instance);
+
+            foreach (var logger in DefaultLoggers)
+                loggers.Add(logger);
+
+            foreach (var loggerType in DefaultLoggerTypes)
+                loggers.Add(loggerType.Construct<ILogger>());
         }
 
         public LogLevel Enabled { get; set; }
@@ -85,22 +93,43 @@ namespace Common.Logging
         public void Trace(object message)
             => Emit(LogUtils.CreateMessage(source, message.ToString(), LogLevel.Trace));
 
+        public void Trace(string source, object message)
+            => Emit(LogUtils.CreateMessage(source, message.ToString(), LogLevel.Trace));
+
         public void Debug(object message)
+            => Emit(LogUtils.CreateMessage(source, message.ToString(), LogLevel.Debug));
+
+        public void Debug(string source, object message)
             => Emit(LogUtils.CreateMessage(source, message.ToString(), LogLevel.Debug));
 
         public void Verbose(object message)
             => Emit(LogUtils.CreateMessage(source, message.ToString(), LogLevel.Verbose));
 
+        public void Verbose(string source, object message)
+            => Emit(LogUtils.CreateMessage(source, message.ToString(), LogLevel.Verbose));
+
         public void Info(object message)
+            => Emit(LogUtils.CreateMessage(source, message.ToString(), LogLevel.Information));
+
+        public void Info(string source, object message)
             => Emit(LogUtils.CreateMessage(source, message.ToString(), LogLevel.Information));
 
         public void Warn(object message)
             => Emit(LogUtils.CreateMessage(source, message.ToString(), LogLevel.Warning));
 
+        public void Warn(string source, object message)
+            => Emit(LogUtils.CreateMessage(source, message.ToString(), LogLevel.Warning));
+
         public void Error(object message)
             => Emit(LogUtils.CreateMessage(source, message.ToString(), LogLevel.Error));
 
+        public void Error(string source, object message)
+            => Emit(LogUtils.CreateMessage(source, message.ToString(), LogLevel.Error));
+
         public void Fatal(object message)
+            => Emit(LogUtils.CreateMessage(source, message.ToString(), LogLevel.Fatal));
+
+        public void Fatal(string source, object message)
             => Emit(LogUtils.CreateMessage(source, message.ToString(), LogLevel.Fatal));
 
         public void Emit(LogMessage message)
@@ -151,7 +180,7 @@ namespace Common.Logging
 
         public static void Raw(object message, ConsoleColor color = ConsoleColor.White)
         {
-            if (message is null || !LogUtils.IsConsoleAvailable)
+            if (message is null)
                 return;
 
             System.Console.ForegroundColor = color;
@@ -169,7 +198,7 @@ namespace Common.Logging
 
             foreach (var output in allOutputs)
             {
-                if (!output.loggers.Any(l => l.GetType() == logger.GetType()))
+                if (!output.loggers.Any(l => l != null && l.GetType() == logger.GetType()))
                     output.AddLogger(logger);
             }
         }
@@ -186,26 +215,28 @@ namespace Common.Logging
                 throw new Exception($"Type '{type.FullName}' is not a subclass of ILogger");
 
             foreach (var output in allOutputs)
-                output.loggers?.RemoveAll(l => l.GetType() == type);
+                output.loggers?.RemoveAll(l => l != null && l.GetType() == type);
         }
 
         public static void EnableForAll(LogLevel level)
         {
             foreach (var output in allOutputs)
                 output.Enable(level);
+
+            if (!LogUtils.Default.Any(level))
+                LogUtils.Default |= level;
         }
 
         public static void DisableForAll(LogLevel level)
         {
             foreach (var output in allOutputs)
                 output.Disable(level);
+
+            if (LogUtils.Default.Any(level))
+                LogUtils.Default &= ~level;
         }
 
         internal static void Init()
-        {
-            Common = new LogOutput("Common Library");
-            Common.AddConsoleIfPresent();
-            Common.AddFileWithPrefix("General Log");
-        }
+            => Common = new LogOutput("Library");
     }
 }

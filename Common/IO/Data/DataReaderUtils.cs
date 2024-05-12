@@ -1,8 +1,5 @@
 ﻿using Common.Extensions;
 using Common.IO.Collections;
-using Common.Logging;
-
-using HarmonyLib;
 
 using System;
 using System.Collections.Generic;
@@ -13,7 +10,6 @@ namespace Common.IO.Data
     public static class DataReaderUtils
     {
         public static readonly LockedDictionary<Type, Func<DataReader, object>> Readers = new LockedDictionary<Type, Func<DataReader, object>>();
-        public static readonly LogOutput Log = new LogOutput("Data Reader Utils").Setup();
 
         public static Func<DataReader, object> GetReader(Type type)
         {
@@ -56,10 +52,7 @@ namespace Common.IO.Data
             }
 
             if (method != null)
-            {
-                DataReaderLoader.Log.Info($"Cached a new reader for type '{type.FullName}': {method.ToName()}");
                 return Readers[type] = ReaderMethodToDelegate(method);
-            }
 
             throw new InvalidOperationException($"No readers assigned for type '{type.FullName}'");
         }
@@ -75,18 +68,7 @@ namespace Common.IO.Data
 
         public static Func<DataReader, object> ReaderMethodToDelegate(MethodInfo method)
         {
-            if (MethodExtensions.DisableFastInvoker)
-                return reader => method.Invoke(reader, null);
-
-            try
-            {
-                var invoker = MethodInvoker.GetHandler(method);
-                return reader => invoker(reader);
-            }
-            catch
-            {
-                return reader => method.Invoke(reader, null);
-            }
+            return reader => method.Invoke(reader, null);
         }
     }
 }

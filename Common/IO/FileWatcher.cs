@@ -12,7 +12,7 @@ namespace Common.IO
         private string filePath;
         private DateTime lastChanged;
         private bool changedRaised;
-        
+
         public NotifyFilters Filters
         {
             get => watcher.NotifyFilter;
@@ -39,7 +39,7 @@ namespace Common.IO
         public event Action OnCreated;
         public event Action OnDeleted;
 
-        public FileWatcher(string path, NotifyFilters filters = NotifyFilters.LastWrite)
+        public FileWatcher(string path, NotifyFilters filters = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.Attributes | NotifyFilters.Size)
         {
             filePath = Path.GetFullPath(path);
 

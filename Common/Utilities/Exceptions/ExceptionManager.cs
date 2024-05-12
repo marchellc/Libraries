@@ -1,9 +1,6 @@
 ﻿using Common.Logging;
-using Common.Logging.Console;
-using Common.Logging.File;
 using Common.Extensions;
 using Common.IO.Collections;
-using Common.Attributes.Custom;
 
 using System;
 using System.Diagnostics;
@@ -18,16 +15,15 @@ namespace Common.Utilities.Exceptions
 
         public static ExceptionSettings Settings { get; set; }
 
-        public static LogOutput Output { get; private set; } 
+        public static LogOutput Output { get; private set; }
 
-        public static Func<Exception, string> ExceptionFormatter { get; set; } 
+        public static Func<Exception, string> ExceptionFormatter { get; set; }
         public static Func<StackFrame[], string> TraceFormatter { get; set; }
 
         public static LockedList<Exception> AllExceptions => allExceptions;
         public static LockedList<Exception> UnhandledExceptions => unhandledExceptions;
 
-        [Init]
-        private static void Init()
+        internal static void Init()
         {
             allExceptions = new LockedList<Exception>();
             unhandledExceptions = new LockedList<Exception>();
@@ -38,11 +34,7 @@ namespace Common.Utilities.Exceptions
             TraceFormatter = ExceptionUtils.FormatTrace;
 
             Output = new LogOutput("Exception Manager");
-
-            Output.AddConsoleIfPresent();
-            Output.AddFileWithPrefix("EXCEPTIONS");
-
-            Output.Info($"Initialized!");
+            Output.Setup();
 
             AppDomain.CurrentDomain.FirstChanceException += OnGeneralThrown;
             AppDomain.CurrentDomain.UnhandledException += OnUnhandledThrown;

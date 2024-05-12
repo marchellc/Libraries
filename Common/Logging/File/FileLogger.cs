@@ -4,46 +4,32 @@ using System.Threading;
 
 namespace Common.Logging.File
 {
-    public class FileLogger : ILogger
+    public static class FileLogger
     {
-        private string path;
-        private object gLock;
-        private Timer timer;
+        private static string path;
+        private static object gLock;
+        private static Timer timer;
 
-        private LogMessage lastMsg;
+        private static List<LogMessage> toAdd;
 
-        private List<LogMessage> toAdd;
-
-        public LogMessage Latest => lastMsg;
-
-        public DateTime Started { get; }
-
-        public FileLogger(string path)
+        internal static void Init(string logPath)
         {
-            if (string.IsNullOrWhiteSpace(path))
-                throw new ArgumentNullException(nameof(path));
+            if (string.IsNullOrWhiteSpace(logPath))
+                throw new ArgumentNullException(nameof(logPath));
 
-            this.path = path;
-            this.gLock = new object();
-            this.toAdd = new List<LogMessage>();
-            this.timer = new Timer(_ => WriteLogs(), null, 10, 500);
+            path = logPath;
+            gLock = new object();
+            toAdd = new List<LogMessage>();
+            timer = new Timer(_ => WriteLogs(), null, 10, 500);
         }
 
-        ~FileLogger()
+        public static void Emit(LogMessage message)
         {
-            timer.Dispose();
-            timer = null;
-        }
-
-        public void Emit(LogMessage message)
-        {
-            lastMsg = message;
-
             lock (gLock)
                 toAdd.Add(message);
         }
 
-        private void WriteLogs()
+        private static void WriteLogs()
         {
             lock (gLock)
             {

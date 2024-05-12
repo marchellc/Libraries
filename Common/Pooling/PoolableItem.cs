@@ -15,8 +15,8 @@ namespace Common.Pooling
             var thisType = this.GetType();
             var poolType = typeof(PoolablePool<>).MakeGenericType(thisType);
 
-            poolInstance = poolType.Property("Shared").GetValueFast<object>();
-            poolMethod = TypeExtensions.Method(poolType, "Return");
+            poolInstance = poolType.Property("Shared").Get();
+            poolMethod = poolType.Method("Return");
         }
 
         internal bool isPooled;

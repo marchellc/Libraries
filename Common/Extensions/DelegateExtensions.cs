@@ -8,9 +8,7 @@ namespace Common.Extensions
     public static class DelegateExtensions
     {
         public static readonly LogOutput Log = new LogOutput("Delegate Extensions").Setup();
-        public static readonly bool EnableLogging = ModuleInitializer.IsDebugBuild || ConsoleArgs.HasSwitch("delegateLogger");
-
-        public static bool DisableFastInvoker;
+        public static bool EnableLogging;
 
         public static void Call(this Action action, Action callback = null, Action<Exception> errorCallback = null)
         {

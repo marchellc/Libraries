@@ -1,6 +1,8 @@
 ﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 
+using System;
+
 namespace Common.Utilities
 {
     public static class JsonUtils
@@ -21,6 +23,9 @@ namespace Common.Utilities
 
         public static T JsonDeserialize<T>(this string json)
             => JsonConvert.DeserializeObject<T>(json, JsonSettings);
+
+        public static object JsonDeserialize(this string json, Type type)
+            => JsonConvert.DeserializeObject(json, type, JsonSettings);
 
         public static string JsonSerialize(this object value)
             => JsonConvert.SerializeObject(value, JsonSettings);

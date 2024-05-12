@@ -48,7 +48,7 @@ namespace Common.Caching
             return default;
         }
 
-        public T[] FindAll(Func<T, bool> predicate)
+        public IEnumerable<T> FindAll(Func<T, bool> predicate)
         {
             var list = ListPool<T>.Shared.Rent();
 
@@ -61,8 +61,8 @@ namespace Common.Caching
             return ListPool<T>.Shared.ToArrayReturn(list);
         }
 
-        public T[] GetAll()
-            => cache.ToArray();
+        public IEnumerable<T> GetAll()
+            => cache;
 
         public bool TryFind(Func<T, bool> predicate, out T value)
         {

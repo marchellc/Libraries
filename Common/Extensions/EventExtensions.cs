@@ -1,21 +1,31 @@
-﻿using Common.Logging;
+﻿using Common.IO.Collections;
+using Common.Logging;
 
 using System;
+using System.Linq;
 using System.Reflection;
 
 namespace Common.Extensions
 {
     public static class EventExtensions
     {
+        private static readonly LockedDictionary<Type, EventInfo[]> _events = new LockedDictionary<Type, EventInfo[]>();
+        private static readonly BindingFlags _flags = BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic;
+
         public static LogOutput Log = new LogOutput("Event Extensions").Setup();
 
-        public static EventInfo Event(this Type type, string eventName)
-            => type.GetEvent(eventName, MethodExtensions.BindingFlags);
+        public static EventInfo Event(this Type type, string eventName, bool ignoreCase = false)
+            => GetAllEvents(type).FirstOrDefault(ev => ignoreCase ? ev.Name.ToLower() == eventName.ToLower() : ev.Name == eventName);
 
         public static EventInfo[] GetAllEvents(this Type type)
-            => type.GetEvents(MethodExtensions.BindingFlags);
+        {
+            if (_events.TryGetValue(type, out var events))
+                return events;
 
-        public static void AddHandler(this Type type, string eventName, MethodBase method, object target)
+            return _events[type] = type.GetEvents(_flags);
+        }
+
+        public static void AddHandler(this Type type, string eventName, MethodInfo method, object target)
         {
             if (type is null)
                 throw new ArgumentNullException(nameof(type));
@@ -50,7 +60,7 @@ namespace Common.Extensions
             }
         }
 
-        public static void AddHandler(this Type type, string eventName, MethodBase method)
+        public static void AddHandler(this Type type, string eventName, MethodInfo method)
         {
             if (type is null)
                 throw new ArgumentNullException(nameof(type));
@@ -159,7 +169,7 @@ namespace Common.Extensions
                 return;
             }
 
-            var evDelegate = evDelegateField.GetValueFast<MulticastDelegate>(instance);
+            var evDelegate = evDelegateField.Get<MulticastDelegate>(instance);
 
             if (evDelegate is null)
                 return;
