@@ -1,45 +1,58 @@
-﻿using Common.Configs;
-using Common.Logging;
+﻿using Common.Logging;
+using Common.Serialization;
 using Common.Utilities;
 
-using System.IO;
+using System;
 using System.Threading.Tasks;
 
 namespace Testing
 {
     public static class Program
     {
-        [Config("Test String", "A", "Test string")]
-        public static string TestString = "hello";
-
-        [Config("Test Number", "A test number")]
-        public static int TestNum = 15645;
-
         public static async Task Main(string[] args)
         {
-            var file = $"{Directory.GetCurrentDirectory()}/config.json";
-            var cfg = new ConfigFile(file);
-
-            cfg.Serializer = value => value.JsonSerialize();
-            cfg.Deserializer = (value, type) => JsonUtils.JsonDeserialize(value, type);
-
-            cfg.IsWatched = true;
-
-            cfg.OnLoaded += failures =>
+            try
             {
-                Logger.Info("Config file reloaded");
+                var randomId = Generator.Instance.GetString();
+                var randomObject = new TestObject() { StringValue = randomId };
 
-                foreach (var fail in failures)
-                    Logger.Error($"Config key {fail.Key} failed to load: {fail.Value}");
+                Logger.Info($"Random String: {randomId}");
 
-                Logger.Info($"Test String: {TestString}");
-                Logger.Info($"Test Num: {TestNum}");
-            };
+                var randomBytes = Serializer.Serialize(serializer => serializer.PutSerializable(randomObject));
 
-            cfg.Bind();
-            cfg.Load();
+                Logger.Info($"Bytes: {randomBytes.Length}");
+
+                Deserializer.Deserialize(randomBytes, des =>
+                {
+                    var randomStr = des.GetDeserializable<TestObject>();
+                    Logger.Info($"Random String 3: {randomStr.StringValue}");
+                });
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex);
+            }
 
             await Task.Delay(-1);
+        }
+    }
+
+    public class TestObject : Common.Serialization.Object
+    {
+        public TestObject() { }
+
+        public string StringValue { get; set; }
+
+        public override void Deserialize(Deserializer deserializer)
+        {
+            base.Deserialize(deserializer);
+            StringValue = deserializer.GetString();
+        }
+
+        public override void Serialize(Serializer serializer)
+        {
+            base.Serialize(serializer);
+            serializer.Put(StringValue);
         }
     }
 }

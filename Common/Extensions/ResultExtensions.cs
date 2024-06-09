@@ -11,16 +11,16 @@ namespace Common.Extensions
         public static readonly IResult[] EmptyResults = [];
 
         public static IResult Error()
-            => new Error(null, null);
+            => new ErrorResult(null, null);
 
         public static IResult Error(string message)
-            => new Error(message, null);
+            => new ErrorResult(message, null);
 
         public static IResult Error(Exception exception)
-            => new Error(exception);
+            => new ErrorResult(exception);
 
         public static IResult Error(string message, Exception exception)
-            => new Error(message, exception);
+            => new ErrorResult(message, exception);
 
         public static IResult Success(object result)
             => new SuccessResult(result);
@@ -33,8 +33,8 @@ namespace Common.Extensions
             if (result is null)
                 throw new ArgumentNullException(nameof(result));
 
-            if (result is Error errorResult)
-                return new Error(errorResult.Message, errorResult.Exception);
+            if (result is ErrorResult ErrorResultResult)
+                return new ErrorResult(ErrorResultResult.Message, ErrorResultResult.Exception);
 
             if (result is SuccessResult successResult)
                 return new SuccessResult(successResult.Result);
@@ -50,8 +50,8 @@ namespace Common.Extensions
             if (result.IsSuccess)
                 throw new ArgumentException($"Attempted to read error message of a success result.");
 
-            if (result is not Error errorResult)
-                throw new ArgumentException($"The provided result type is not of Error.");
+            if (result is not ErrorResult errorResult)
+                throw new ArgumentException($"The provided result type is not of ErrorResult.");
 
             return errorResult.Message;
         }
@@ -62,10 +62,10 @@ namespace Common.Extensions
                 throw new ArgumentNullException(nameof(result));
 
             if (result.IsSuccess)
-                throw new ArgumentException($"Attempted to read error message of a success result.");
+                throw new ArgumentException($"Attempted to read exception of a success result.");
 
-            if (result is not Error errorResult)
-                throw new ArgumentException($"The provided result type is not of Error.");
+            if (result is not ErrorResult errorResult)
+                throw new ArgumentException($"The provided result type is not of ErrorResult.");
 
             return errorResult.Exception;
         }

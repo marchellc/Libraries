@@ -4,7 +4,6 @@ using Common.Utilities.Exceptions;
 using Common.Logging;
 using Common.Utilities;
 using Common.Extensions;
-using Common.IO.Data;
 using Common.IO;
 
 using System;
@@ -98,11 +97,7 @@ namespace Common
 
                 MethodExtensions.EnableLogging = ConsoleArgs.HasSwitch("MethodLogger");
 
-                DataWriterLoader.Initialize();
-                DataReaderLoader.Initialize();
-
                 InitializedAt = DateTime.Now;
-
                 OnInitialized.Call();
 
                 LogOutput.Common.Info($"Library initialized (version: {Version}, time: {DateTime.Now.ToString("G")}), took {(InitializedAt - initStarted).TotalSeconds} second(s)!");

@@ -1,12 +1,12 @@
 ﻿using Common.Extensions;
 using Common.Pooling.Pools;
 using Common.IO.Collections;
-using Common.IO.Data;
 
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.IO;
+using Common.Serialization;
 
 namespace Common.Caching
 {
@@ -125,32 +125,26 @@ namespace Common.Caching
             if (data.Length < 4)
                 return;
 
-            var reader = PoolablePool<DataReader>.Shared.Rent();
+            Deserializer.Deserialize(data, deserializer =>
+            {
+                var size = deserializer.GetInt32();
 
-            reader.Set(data);
-
-            var size = reader.ReadInt();
-
-            for (int i = 0; i < size; i++)
-                cache.Add(reader.Read<T>());
-
-            PoolablePool<DataReader>.Shared.Return(reader);
+                for (int i = 0; i < size; i++)
+                    cache.Add(deserializer.Get<T>());
+            });
         }
 
         public void Write(string filePath)
         {
-            var writer = PoolablePool<DataWriter>.Shared.Rent();
+            var data = Serializer.Serialize(serializer =>
+            {
+                serializer.Put(cache.Count);
 
-            writer.WriteInt(cache.Count);
-
-            for (int i = 0; i < cache.Count; i++)
-                writer.Write(cache[i]);
-
-            var data = writer.Data;
+                for (int i = 0; i < cache.Count; i++)
+                    serializer.Put(cache[i]);
+            });
 
             File.WriteAllBytes(filePath, data);
-
-            PoolablePool<DataWriter>.Shared.Return(writer);
         }
 
         private void Save()
